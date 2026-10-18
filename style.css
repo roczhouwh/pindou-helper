@@ -1,0 +1,1179 @@
+/* ============================================================
+   拼豆图纸生成器 — 样式
+   ============================================================ */
+
+/* --- Reset & Base --- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* 确保 [hidden] 始终生效，不被带 display 的 class 覆盖 */
+[hidden] { display: none !important; }
+
+:root {
+  --bg: #FAFAFA;
+  --surface: #FFFFFF;
+  --border: #E5E5E5;
+  --text: #1A1A1A;
+  --text-secondary: #666666;
+  --text-muted: #999999;
+  /* ⚠️ 主题色是**跨文件常量**，改它必须同步改以下全部位置（见 REVIEW.md n1）：
+       ① 本处 --primary / --selection
+       ② index.html 的 <meta name="theme-color">  ← 已由 app.js 运行时自动同步，通常不必手改
+       ③ manifest.json 的 "theme_color"
+       ④ icon.svg 的渐变 stop-color
+       ⑤ 若改了色，需重新运行图标生成（icon-192/512 及其 -maskable 版本） */
+  --primary: #6366F1;
+  --primary-hover: #4F46E5;
+  --primary-light: #EEF2FF;
+  --danger: #EF4444;
+  --selection: #6366F1;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* --- 可访问性工具类 --- */
+
+/* 视觉隐藏但**保留给读屏**。用于 aria-live 播报区、禁用原因等
+   （不能用 display:none / visibility:hidden —— 那样读屏也拿不到）。 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 统一的键盘焦点样式。除 .custom-input 外此前所有可聚焦元素都无自定义
+   focus 样式，键盘用户看不出焦点在哪（见 REVIEW.md n3）。
+   用 :focus-visible 只对键盘聚焦生效，鼠标点击不出现外框。 */
+:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* --- Header --- */
+.header {
+  text-align: center;
+  padding: 32px 16px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+/* --- 图纸存档（PLAN 第三批 6b） ---
+   与其它分区同构：白底卡片 + 圆角 + 边框。
+   ⚠️ 本区**必须独立于 .upload-section**（不是它的子元素）：
+   showViewer() 会隐藏上传区，而"载入存档"在上传之前就得可用（存档不含原图）。 */
+.archive-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.archive-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.archive-name,
+.archive-select {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--surface);
+  outline: none;
+  min-width: 0;
+}
+
+.archive-name { flex: 1 1 180px; max-width: 260px; }
+.archive-select { flex: 1 1 180px; max-width: 300px; }
+
+.archive-name:focus,
+.archive-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+}
+
+.archive-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* 存档模式横幅（载入存档后原图已清空 ⇒ 依赖重新采样的控件不可用）。
+   ⚠️ 用左侧色条 + 文字说明，不只用颜色：必须让用户知道"为什么灰了"，
+   否则一片灰控件会被当成故障（本仓库要求"静默失效不可接受"）。 */
+.archive-banner {
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--primary-light);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+/* --- Main Layout --- */
+.main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* --- Upload Zone --- */
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--surface);
+}
+
+.upload-zone:hover,
+.upload-zone.dragover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.upload-icon {
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  display: inline-flex;
+}
+
+.upload-text {
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+.upload-text strong {
+  color: var(--primary);
+}
+
+.upload-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+.upload-error {
+  color: var(--danger);
+  font-size: 14px;
+  text-align: center;
+  margin-top: 8px;
+}
+
+/* --- Viewer --- */
+.viewer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.viewer-toolbar {
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.viewer-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 800px;
+  height: 500px;
+  background: #FAFAFA;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.viewer-wrapper.panning {
+  cursor: grabbing;
+}
+
+#viewerCanvas {
+  display: block;
+}
+
+.selection-overlay {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.selection-box {
+  position: absolute;
+  border: 3px solid var(--selection);
+  background: rgba(99, 102, 241, 0.1);
+  pointer-events: auto;
+  cursor: move;
+  touch-action: none;
+  z-index: 11;
+  /* 不依赖 hidden 属性，用 class 控制显隐 */
+  display: none;
+}
+.selection-box.visible {
+  display: block;
+}
+
+/* 8 控制手柄 */
+.handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--surface);
+  border: 2px solid var(--selection);
+  border-radius: 50%;
+  pointer-events: auto;
+}
+
+.handle.nw { top: -6px; left: -6px; cursor: nw-resize; }
+.handle.n  { top: -6px; left: 50%; margin-left: -6px; cursor: n-resize; }
+.handle.ne { top: -6px; right: -6px; cursor: ne-resize; }
+.handle.w  { top: 50%; margin-top: -6px; left: -6px; cursor: w-resize; }
+.handle.e  { top: 50%; margin-top: -6px; right: -6px; cursor: e-resize; }
+.handle.sw { bottom: -6px; left: -6px; cursor: sw-resize; }
+.handle.s  { bottom: -6px; left: 50%; margin-left: -6px; cursor: s-resize; }
+.handle.se { bottom: -6px; right: -6px; cursor: se-resize; }
+
+.viewer-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* --- Controls --- */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px 20px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.control-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.aspect-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 2px;
+}
+
+.grid-sizes {
+  display: flex;
+  gap: 6px;
+}
+
+.grid-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--text-secondary);
+  font-family: var(--font);
+}
+
+.grid-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.grid-btn.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.custom-size {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.custom-inputs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.custom-input {
+  width: 56px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  text-align: center;
+  font-family: var(--font);
+  outline: none;
+}
+
+.custom-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+}
+
+.custom-x {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* --- Simplify Control --- */
+.simplify-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.simplify-control input[type="range"] {
+  width: 100px;
+  accent-color: var(--primary);
+}
+
+.simplify-value {
+  font-size: 13px;
+  color: var(--text-secondary);
+  min-width: 44px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Ruler Control --- */
+/* 与简化滑块同构：label 包住控件，点文字也能切换（触屏上尤其重要） */
+.ruler-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.ruler-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  margin: 0;
+  /* 触摸设备上 16px 命中区偏小，扩大到 24px（不改变视觉尺寸） */
+  padding: 4px;
+  box-sizing: content-box;
+}
+
+/* .control-label 默认 text-transform: uppercase，中文无影响；此处仅去掉 letter-spacing 观感更紧凑 */
+.ruler-toggle .control-label {
+  letter-spacing: 0.02em;
+}
+
+/* --- 禁用态样式（PLAN 第三批 6b 补） ---
+   ⚠️ **本节是 6b 才补上的**：此前只有 `.btn-primary:disabled` 一条，
+   而 6b 的"无原图模式"会**批量禁用**网格预设 / 自定义输入 / 「应用」/ 简化滑块 ——
+   实测截图发现：`<button>` 与 `<input>` 的默认禁用外观在这套自定义样式下**看不出来**，
+   于是"横幅说它们不可用、控件却看着好好的"，用户只会以为点了没反应。
+   （禁用态必须是**用户看得见**的信息，不能只在代码里 `disabled = true`。）
+
+   统一用「降不透明度 + 禁用光标」，且**不改布局**（尺寸/间距不变，
+   避免禁用/启用切换时界面跳动）。 */
+.grid-btn:disabled,
+.custom-input:disabled,
+.btn:disabled,
+.archive-name:disabled,
+.archive-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 禁用时不要保留 hover 反馈 —— 会让人以为还能点
+   （.btn 与 .grid-btn 的 hover 都有变色规则，这里显式压掉） */
+.grid-btn:disabled:hover,
+.btn:disabled:hover {
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+/* 当前网格尺寸的按钮在禁用时仍保留 active 底色（那是**信息**：图纸就是这个尺寸），
+   但同样压暗，以免看起来像"可以点它切换"。 */
+.grid-btn.active:disabled {
+  opacity: 0.7;
+}
+
+/* 简化滑块禁用时把读数一并压暗：读数说的是"需原图"，与控件状态同向 */
+.simplify-control input[type="range"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.simplify-control input[type="range"]:disabled + .simplify-value {
+  opacity: 0.7;
+}
+
+/* --- Buttons --- */
+.btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-family: var(--font);
+}
+
+.btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+  padding: 10px 24px;
+  font-size: 15px;
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+  color: white;
+}
+
+.btn-primary:disabled {
+  background: var(--text-muted);
+  border-color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+/* --- 手机端双按钮上传 --- */
+.upload-buttons {
+  display: none;
+  gap: 12px;
+  width: 100%;
+}
+
+.upload-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 16px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.upload-btn svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.upload-btn:active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  transform: scale(0.97);
+}
+
+/* --- Camera Overlay --- */
+.camera-overlay {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#cameraVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.camera-toolbar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(transparent, rgba(0,0,0,0.6));
+}
+
+.btn-capture {
+  background: rgba(255,255,255,0.9);
+  border: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #000;
+}
+
+.btn-capture:active {
+  transform: scale(0.92);
+}
+
+.btn-close-camera {
+  position: absolute;
+  right: 16px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  background: rgba(255,255,255,0.2);
+  border: none;
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+
+/* --- Loading Spinner --- */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  gap: 12px;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-text {
+  color: white;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* --- 全局提示条 --- */
+/* 必须独立于各 section 的显隐：导出/生成失败时 upload-section 已隐藏，
+   写进 #uploadError 的提示用户看不见（见 REVIEW.md C2 修复补充） */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  max-width: min(90vw, 420px);
+  padding: 12px 18px;
+  background: var(--danger);
+  color: #FFFFFF;
+  font-size: 14px;
+  line-height: 1.5;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  z-index: 1100; /* 高于 install-banner(500) 与 loading-overlay(1000)，低于 camera-overlay(2000) */
+  text-align: center;
+  animation: toast-in 0.2s ease-out;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* --- Install Banner --- */
+.install-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 500;
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
+}
+
+.install-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.install-btn {
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font);
+  white-space: nowrap;
+}
+
+.install-btn:hover {
+  background: var(--primary-hover);
+}
+
+.install-close {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 4px;
+  line-height: 1;
+}
+
+/* --- Preview --- */
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.preview-container {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  padding: 8px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.preview-canvas {
+  display: block;
+  border-radius: 4px;
+}
+
+/* ---- 单元格编辑（PLAN 第三批 6c/6d / js/ui/edit-ui.js）---- */
+
+/* ⚠️ `touch-action: none` 只在**进入编辑模式**时加（`.editing` 类由 edit-ui.js 切换）：
+   不加 ⇒ 触屏拖拽被当成页面滚动，格子涂不上；
+   无条件加 ⇒ 未进入编辑时预览图也吃掉滚动手势，用户在手机上没法滑过这一屏。 */
+.preview-canvas.editing {
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.edit-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.edit-tool-btn {
+  padding: 6px 12px;
+  font-size: 14px;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.edit-tool-btn:hover { background: var(--primary-light); }
+
+/* 选中态必须**同时**靠颜色与边框/字重表达（只靠颜色对色盲用户不可辨，
+   同 .preview-warning 的处理思路） */
+.edit-tool-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.edit-exit-btn { color: var(--text-secondary); }
+
+.edit-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  min-width: 96px;
+}
+
+.edit-color-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid rgba(0,0,0,0.15);
+  flex-shrink: 0;
+}
+
+.edit-color-name { font-weight: 600; }
+
+.edit-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* 提示条里的"警告"态：画笔没选色时用户点了会没反应，必须显眼（同 .preview-warning） */
+.edit-hint.edit-hint-warn {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* 统计表里的「选为画笔色」按钮 —— 常规字号会让 52×52 的表格明显变高，
+   故压小一档；它仍是有可访问名称的真实 <button>（键盘与读屏都可达）。 */
+.stats-pick-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: var(--font);
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.stats-pick-btn:hover {
+  background: var(--primary-light);
+  color: var(--primary-hover);
+  border-color: var(--primary);
+}
+
+/* 简化滑块被手工编辑锁住时的**就近说明**。
+   ⚠️ 只置灰不解释 = 用户以为工具坏了（本仓库一贯要求：静默失效不可接受）。 */
+.simplify-lock-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--danger);
+  max-width: 320px;
+}
+
+.preview-info {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* 极端宽高比的量化偏差警告（见 REVIEW.md M9）——
+   不能只靠颜色区分（色盲用户看不出），故同时加粗并带 ⚠️ 符号 */
+.preview-info.preview-warning {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* --- Stats --- */
+.stats-table-wrapper {
+  overflow-x: auto;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.stats-table th,
+.stats-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.stats-table th {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #FAFAFA;
+}
+
+.stats-table tbody tr:hover {
+  background: var(--primary-light);
+}
+
+.stats-table tfoot td {
+  font-weight: 600;
+  background: #FAFAFA;
+}
+
+.color-swatch {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid rgba(0,0,0,0.1);
+  vertical-align: middle;
+}
+
+.color-name {
+  font-weight: 500;
+}
+
+.color-hex {
+  font-family: 'SF Mono', 'Cascadia Code', monospace;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.color-count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Responsive --- */
+@media (max-width: 640px) {
+  .header h1 { font-size: 22px; }
+  .header { padding: 24px 12px 16px; }
+  .main { padding: 16px 12px 48px; gap: 16px; }
+  .viewer-wrapper { height: min(400px, 60vh); }
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+    gap: 12px;
+    overflow: visible;
+  }
+  .control-group { flex-shrink: 1; width: 100%; }
+  .control-group.simplify-group {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  .control-group.simplify-group .control-label {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .grid-btn { padding: 8px 12px; font-size: 13px; flex: 1; text-align: center; }
+  .grid-sizes { gap: 4px; display: flex; width: 100%; }
+  .custom-size {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  .custom-size .control-label {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .custom-inputs { justify-content: center; }
+  .simplify-control { justify-content: center; }
+  .upload-zone { padding: 32px 16px; }
+  .upload-text { font-size: 14px; }
+  .upload-hint { font-size: 12px; }
+  .preview-container { margin: 0 -8px; border-radius: 0; }
+  .stats-table th,
+  .stats-table td { padding: 8px 10px; font-size: 13px; }
+  .color-swatch { width: 20px; height: 20px; }
+  .viewer-hint { font-size: 12px; }
+  .section-title { font-size: 16px; }
+  .custom-input { width: 48px; font-size: 13px; }
+  .simplify-control input[type="range"] { width: 80px; }
+}
+
+/* 小屏手机 (<400px) */
+@media (max-width: 400px) {
+  .header h1 { font-size: 18px; }
+  .main { padding: 12px 8px 40px; gap: 12px; }
+  .viewer-wrapper { height: min(300px, 50vh); }
+  .controls { padding: 10px 12px; gap: 8px; }
+  .grid-btn { padding: 4px 8px; font-size: 12px; }
+  .upload-zone { padding: 24px 12px; }
+  .upload-text { font-size: 13px; }
+  .custom-input { width: 40px; }
+}
+
+/* 触摸设备：放大选框手柄 + 双按钮上传 */
+@media (pointer: coarse) {
+  .upload-zone { display: none; }
+  .upload-buttons { display: flex; }
+  .handle {
+    width: 22px;
+    height: 22px;
+    border-width: 3px;
+  }
+  .handle.nw { top: -11px; left: -11px; }
+  .handle.n  { top: -11px; margin-left: -11px; }
+  .handle.ne { top: -11px; right: -11px; }
+  .handle.w  { margin-top: -11px; left: -11px; }
+  .handle.e  { margin-top: -11px; right: -11px; }
+  .handle.sw { bottom: -11px; left: -11px; }
+  .handle.s  { bottom: -11px; margin-left: -11px; }
+  .handle.se { bottom: -11px; right: -11px; }
+  #viewerHint2 { display: none; }
+  #viewerHint3 { display: block; }
+}
+
+/* 安全区域适配 (iPhone X+ notch) */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .main { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+  @media (max-width: 640px) {
+    .main { padding-bottom: calc(48px + env(safe-area-inset-bottom)); }
+  }
+}
+
+/* Standalone 模式 (添加到主屏幕后) */
+@media (display-mode: standalone) {
+  .header { padding-top: calc(32px + env(safe-area-inset-top, 0px)); }
+  @media (max-width: 640px) {
+    .header { padding-top: calc(24px + env(safe-area-inset-top, 0px)); }
+  }
+}
+
+/* ============================================================
+   A4 打印出口（PLAN §4.2~4.5）—— 屏幕态与打印态
+   ============================================================
+   ⚠️⚠️ **本段绝不允许出现 `print-color-adjust: exact`**。
+   该属性的用途正是"强制打印背景"，一旦加上：
+     · 用户不勾「背景图形」时**色块照样全彩印出** ⇒「打印色块」开关形同虚设、
+       §4.5 的**省墨模式彻底消失**；
+     · 实测证据：样张第一版加了它，"不勾背景"与"勾上"两份 PDF 的彩色填充种数
+       **完全相同（444 种）**，用户"看不出区别"—— 这正是 PLAN §4.6「项 4 的真相」。
+   该属性与"让用户能选省墨模式"**互斥**，故**刻意不加**，由 #printColorToggle 显式开关承担。
+
+   ⚠️ 网格线必须用 **border**，不能用 background：实测不勾「背景图形」时
+      background 会随色块一起消失，而 border 仍以 #ababab 印出。
+      写成 background 的后果是省墨模式下只剩色号、没有格子边界，根本没法照着拼。
+   ============================================================ */
+
+/* ---- 屏幕态：打印版面完全隐藏，只在打印时出现 ---- */
+#printRoot { display: none; }
+
+/* 打印信息行：与 #previewInfo 同构，但打印是"不可逆物理动作"，
+   故用左侧色条做视觉区分（用户点之前必须看到页数与每格尺寸）。 */
+.print-info {
+  border-left: 3px solid var(--primary);
+  padding-left: 8px;
+}
+
+/* ---- 打印态 ---- */
+@media print {
+  /* @page 决定纸张与物理边距：mm 是真实物理单位，无需用户调缩放（§4.2 优势①）。
+     ⚠️ 与 docs/print-proof-a4.html 保持同一组数值（5mm 边距 ⇒ 200mm 可打印宽）。 */
+  @page { size: A4; margin: 5mm; }
+
+  /* ---- 屏幕 UI 全部隐藏：只留打印版面 ---- */
+  /* ⚠️ **每新增一个屏幕上的分区，都必须加进这个清单**（PLAN 第三批 6b 实测踩到）：
+      新增 `.archive-section` 时漏加了它，打印纸上就会多出存档区的
+      输入框、下拉框与「保存/载入/删除」按钮 —— 而这是**要拿去买豆照着拼**的图纸。
+      清单在 `test-library.js` 里有一条断言逐个核对（不靠人眼记）。 */
+  /* ⚠️ 这里**刻意不列**那个「读屏专用隐藏类」（1×1px + overflow:hidden 的那个）：
+     它在纸上本来就不可能看见；给它再加一条 display 声明会**多出第二处**
+     对同一件事的声明，与既有的 `[hidden] { display:none !important }` 形成双份维护 ——
+     实测会被 `test-section5-guard.js` 判红（该套件守护的正是
+     「读屏隐藏类不得用 display 覆盖 [hidden]」）。
+     ⚠️ 注意别在注释里连着写「类选择器 + display:」——该守护的正则**不剥注释**，
+        写成那样会被自己的注释误判成违规（本轮实测踩到）。 */
+  .header,
+  .upload-section,
+  .archive-section,
+  .viewer-section,
+  .controls-section,
+  .preview-section,
+  .stats-section,
+  .loading-overlay,
+  .toast,
+  .install-banner { display: none !important; }
+
+  .main { padding: 0 !important; gap: 0 !important; display: block !important; }
+  body { background: #fff !important; }
+  html, body { margin: 0; padding: 0; }
+
+  /* ---- 打印版面显示 ---- */
+  #printRoot { display: block !important; }
+
+  /* 一页一块：宽 = 可打印宽 200mm（= 210 − 5mm×2）。
+     ⚠️ 不要写 210mm —— 那是纸宽，@page 的 5mm 边距已经占掉两侧，
+        写成 210mm 会横向溢出，表现为"内容被缩小"或"多出空白页"。 */
+  .print-page {
+    width: 200mm;
+    page-break-after: always;
+    break-after: page;
+  }
+  /* 末页不留分页符 —— 多余的分页符会印出**空白页**，
+     而"无多余空白页"正是 §4.6 项 3 已通过的判据。 */
+  .print-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .print-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4mm;
+    margin: 0 0 1.5mm 0;
+  }
+  .print-title { font-size: 9pt; font-weight: 700; margin: 0; }
+  .print-pos { font-size: 6.5pt; color: #333; }
+
+  /* ---- 网格：格宽精确 200/52 mm，52 格正好 200mm ---- */
+  .print-grid { display: grid; }
+
+  /* ⚠️⚠️ **格高由 JS 设、不在这里写**（U4 实机测试缺陷，改前必读）：
+     旧版本这里没有高度声明，格高由色号文字的行高撑开 ⇒ 实测 **2.716mm**，
+     而格宽 3.845mm，宽/高 = 1.4155，**整张图纸纵向被压扁 41.6%**
+     （用户实测：「图纸被拉伸，变扁了。不是一个正方形。」）。
+
+     修法是把高度写进 `renderPrintLayout()` 的 `grid-auto-rows`，
+     与 `grid-template-columns` 并排、**引用同一个 `paging.cellMm`**。
+     在这里写 `height: 3.846mm` 会成为 `PRINT_CELL_MM` 之外的**第二份真源**
+     —— 改常量时它不跟着变，正是本文件反复记录过的同类事故成因。
+     ⇒ 需要格高时从 JS 改，**不要**在此处补字面量。
+
+     ⚠️ 两个结构性约束，改动前先读 PLAN §4.6「项 4 的真相」：
+     ① 网格线用 border（不勾背景图形时它仍印得出，background 会消失）；
+     ② **不能**用 overflow:hidden 裁剪色号 —— 样张第一版把方框设为定宽+裁剪，
+        文字被裁掉后看起来"不溢出"，**溢出检查变成假通过**。
+        这里同样不裁剪：宁可让越界可见，也不要制造假绿。
+        （同理：行轨道是定值，色号若真的放不下会溢出而不是把格子撑大 ——
+          这是**要的**，纵向压扁那种"看着装下了"才是灾难。） */
+  .print-cell {
+    border: 0.2mm solid #ababab;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    box-sizing: border-box;
+  }
+  .print-cell > i {
+    font-style: normal;
+    white-space: nowrap;
+    font-size: 6.2pt;   /* = PRINT_FONT_PT，§4.6 项 1 实测定案；改字体须重新量上限 */
+  }
+  /* 深色格白字 / 浅色格黑字 —— 判定复用 render.js 的 pickTextColor()（Rec.601 亮度），
+     与预览/导出**同一套规则**，三处不会各自漂移。空字符串的 data-fg 不匹配任何一条。 */
+  .print-cell[data-fg="light"] > i { color: #FFFFFF; }
+  .print-cell[data-fg="dark"]  > i { color: #000000; }
+
+  /* 整块网格尽量不断页（拼接用的图纸被从中间切开会失去可拼性） */
+  .print-grid-wrap { break-inside: avoid; }
+}

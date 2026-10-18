@@ -1,0 +1,337 @@
+import { findNearestColor } from '../../color-palette.js';
+import { $, downloadBtn, offscreenCanvas, printBtn, saveArchiveBtn } from '../core/dom.js';
+import { state } from '../core/state.js';
+import { showToast } from '../input/upload.js';
+import { renderPreview } from '../output/preview.js';
+import { renderStats } from '../output/stats.js';
+// ⚠️ `refreshPrintInfo` 而不是 `refreshPrintLayout`：屏幕上只缺"文案随档位变"（U6），
+//    `#printRoot` 只在 @media print 显示，无需在生成时重建版面。
+//    依赖方向与 preview.js / stats.js 完全一致（同属 output/ 叶子），不新增跨层边 ——
+//    print.js 不 import grid.js，故无环。
+import { refreshPrintInfo } from '../output/print.js';
+import { clearEditHistory } from './edit.js';
+import { applySimplify, cloneGrid, rebuildColorCounts } from './simplify.js';
+import { announce, clamp } from '../ui/a11y.js';
+import { hideLoading, showLoading } from '../ui/loading.js';
+
+// ============================================================
+// js/pipeline/grid.js — 网格生成（逐格采样 → 色板映射）
+// ============================================================
+// 自 app.js 的「5. 网格生成 + 色板映射」整段搬迁而来（REFACTOR §7.1 步骤 5）。
+//
+// ⚠️ **两条契约必须原样保留**（均有测试守护，见 test-patch-removal.js）：
+//   ① `generateGrid()` 是**唯一入口** —— 它驱动加载遮罩 + 把重活推到 rAF + finally 兜底。
+//      真实实现在 `generateGridCore()`；**直接调它会绕过遮罩**，
+//      用户观感就是"点了没反应"（CLAUDE.md 有同类教训）。
+//   ② **时序契约**：`generateGrid()` 返回时 `state.gridData` / `state.colorCounts`
+//      **仍是上一轮**的数据（真实生成被推迟到下一帧）。需要新数据请在下一帧之后再读。
+//
+// ⚠️ 两者**必须同文件** —— 入口与实现是同一职责，拆开会让 ① 的"唯一入口"失效。
+//
+// 本文件是原生 ES module（步骤 0 已完成）：依赖由上方 import 显式声明，
+// 不再靠"共享全局词法环境"。
+// 它调用的 showLoading / hideLoading / showToast / announce / renderPreview /
+// renderStats / applySimplify 等来自其它模块，由上方 import 显式引入。
+// ============================================================
+// ============================================================
+// 5. 网格生成 + 色板映射
+// ============================================================
+/**
+ * 生成图纸的**唯一入口**（编排：加载遮罩 + 帧调度 + 错误兜底）。
+ *
+ * ⚠️ **时序契约（REFACTOR.md §7.4 步 1 要求显式化）**：
+ * 真实生成被推迟到 `requestAnimationFrame`，因此**本函数返回时
+ * `state.gridData` / `state.colorCounts` 仍是上一轮的数据**。
+ * 调用后立刻读这两个字段会读到旧值；需要新数据请在下一帧之后再读。
+ * 步骤 5 搬迁模块时务必保留此语义，否则会出现"偶发读到上一轮"的 bug。
+ *
+ * 收尾放在 `finally` 是必须的：真实生成一旦抛错，`hideLoading()` 将永不执行，
+ * 加载遮罩会**永久卡死界面**（这正是下方 catch 存在的理由）。
+ *
+ * > 本函数此前是「函数声明 + 文件末尾猴补丁整体覆盖」的形态，
+ * > 已按 REFACTOR.md §2.1 拆除。**不要再对函数做猴补丁** —— 它是模块化的硬阻塞。
+ */
+export function generateGrid() {
+  const startTime = Date.now();
+  showLoading('正在生成图纸…');
+  // 用 rAF 把重活推到下一帧：先让遮罩真正画出来，再阻塞主线程采样
+  requestAnimationFrame(() => {
+    try {
+      generateGridCore();
+    } catch (err) {
+      // 必须兜住：否则 hideLoading 永远不会执行，遮罩会永久卡死界面
+      console.error('生成图纸失败：', err);
+      showToast('生成图纸失败，请调整选框后重试');
+    } finally {
+      // 至少显示 300ms 避免闪烁
+      const elapsed = Date.now() - startTime;
+      setTimeout(hideLoading, Math.max(0, 300 - elapsed));
+    }
+  });
+}
+
+/**
+ * 真实的网格生成实现（逐格采样 → 色板映射 → 颜色简化 → 预览 + 统计）。
+ *
+ * **请勿直接调用** —— 走 `generateGrid()` 入口，否则加载遮罩不会被驱动，
+ * 用户观感就是"点了没反应"（见 CLAUDE.md「按阶段选对函数」的同类教训）。
+ */
+export function generateGridCore() {
+  if (!state.image) return;
+
+  const { x, y, w, h } = state.selection;
+  const gw = state.gridW;
+  const gh = state.gridH;
+
+  // 创建离屏 canvas 用于采样。
+  // iOS Safari 对大 canvas 有硬限制（~4096px 或总像素上限），
+  // 大图先降采样到最长边 2048 再采样。
+  // ⚠️ 精度说明（更正原注释）：降采样**会**影响颜色 —— drawImage 会做平滑平均，
+  // 对细纹理/高频细节是真实的低通损失，只是对"每格平均色"这一用途影响很小。
+  // 原注释称"颜色精度不受影响"夸大其保证（见 REVIEW.md m11）。
+  // 用 imageSmoothingQuality='high' 减轻该损失（见 REVIEW.md n9）。
+  const MAX_OFFSCREEN = 2048;
+  let sampleW = state.imageW;
+  let sampleH = state.imageH;
+  if (Math.max(sampleW, sampleH) > MAX_OFFSCREEN) {
+    const scale = MAX_OFFSCREEN / Math.max(sampleW, sampleH);
+    sampleW = Math.round(sampleW * scale);
+    sampleH = Math.round(sampleH * scale);
+  }
+
+  const offCtx = offscreenCanvas.getContext('2d');
+  offscreenCanvas.width = sampleW;
+  offscreenCanvas.height = sampleH;
+  // 降采样质量默认是 'low'，会加重细纹理的插值损失（见 REVIEW.md n9）。
+  // 必须在赋值 width/height **之后**设置：给 canvas 尺寸赋值会重置绘图状态。
+  offCtx.imageSmoothingEnabled = true;
+  offCtx.imageSmoothingQuality = 'high';
+  offCtx.drawImage(state.image, 0, 0, sampleW, sampleH);
+
+  // 选框像素坐标
+  // 夹取到图片范围内：选框由 UI 拖拽产生，x+w 可能 > 1（拖到右/下缘外），
+  // 不夹取会让后面的裁剪宽高算出负数（见 REVIEW.md M10）
+  const selX = clamp(Math.floor(x * sampleW), 0, sampleW - 1);
+  const selY = clamp(Math.floor(y * sampleH), 0, sampleH - 1);
+  const selW = Math.max(1, Math.min(Math.floor(w * sampleW), sampleW - selX));
+  const selH = Math.max(1, Math.min(Math.floor(h * sampleH), sampleH - selY));
+
+  // ---- 选框内容完整放入网格（contain），居中，不裁剪 ----
+  // 选框宽高比 vs 网格宽高比，计算内容在网格中占据的格数
+  // 选框宽于网格时，内容填满宽度，上下留空；高于网格时，填满高度，左右留空
+  const selAspect = selW / selH;
+  const gridAspect = gw / gh;
+
+  let contentW, contentH, offsetCol, offsetRow;
+  if (selAspect >= gridAspect) {
+    // 内容填满宽度，上下留空
+    // 取整分工（见 REVIEW.md m14）：格数取最接近值（round），留白取整数格（floor）
+    contentW = gw;
+    contentH = Math.max(1, Math.min(gh, Math.round(gw / selAspect)));
+    offsetCol = 0;
+    offsetRow = Math.floor((gh - contentH) / 2);
+  } else {
+    // 内容填满高度，左右留空
+    contentH = gh;
+    contentW = Math.max(1, Math.min(gw, Math.round(gh * selAspect)));
+    offsetCol = Math.floor((gw - contentW) / 2);
+    offsetRow = 0;
+  }
+
+  // ---- 极端宽高比的量化偏差提示（见 REVIEW.md M9）----
+  // 内容只占很少格数时，Math.round 的 ±0.5 格就是很大的相对偏差
+  // （实测 29×29 配 20:1 选框 → 内容 29×1，偏差 +45%）。
+  // 这不是逻辑错误而是**量化极限**（偏差 ≈ 0.5 ÷ content 短边格数），
+  // 故不强行修正，而是如实提示用户。
+  const contentShort = Math.min(contentW, contentH);
+  const quantError = 0.5 / contentShort;
+  state.aspectWarning = quantError > 0.08
+    ? `选框比例较极端（内容仅 ${contentW}×${contentH} 格），图纸约有 ${Math.round(quantError * 100)}% 的量化拉伸。建议把选框选得更方正些。`
+    : null;
+
+  // 每个内容格对应选框的像素尺寸（contentW/gw = contentH/gh = selAspect，格子为正方形）
+  const cellSampW = selW / contentW;
+  const cellSampH = selH / contentH;
+
+  const grid = [];
+  const colorMap = new Map();
+
+  for (let row = 0; row < gh; row++) {
+    grid[row] = [];
+    for (let col = 0; col < gw; col++) {
+      // 判断是否在内容区域内，不在则留空
+      if (row < offsetRow || row >= offsetRow + contentH ||
+          col < offsetCol || col >= offsetCol + contentW) {
+        grid[row][col] = null;
+        continue;
+      }
+
+      // 映射到选框内的像素坐标
+      const contentRow = row - offsetRow;
+      const contentCol = col - offsetCol;
+
+      // 每格采样区 = 该格在选框内占据的完整矩形，相邻格首尾相接。
+      // 旧实现用「中心点 ± 半格窗口」，窗口边长只有 cellSamp*0.5，
+      // 导致相邻窗口之间空出半格宽的缝（见 REVIEW.md M11）：
+      // 实测 512→29 时整行 54.7% 的像素从未被采样，且缝隙随列号周期漂移，
+      // 等效固定相位梳状降采样，细纹理图会产生规律性串色。
+      // 改为按格边界取整，并保证 [x0, x1) 至少 1px、不超出画布。
+      let x0 = selX + Math.floor(contentCol * cellSampW);
+      let x1 = selX + Math.floor((contentCol + 1) * cellSampW);
+      let y0 = selY + Math.floor(contentRow * cellSampH);
+      let y1 = selY + Math.floor((contentRow + 1) * cellSampH);
+
+      x0 = clamp(x0, 0, sampleW - 1);
+      x1 = clamp(x1, x0 + 1, sampleW);
+      y0 = clamp(y0, 0, sampleH - 1);
+      y1 = clamp(y1, y0 + 1, sampleH);
+
+      const imageData = offCtx.getImageData(x0, y0, x1 - x0, y1 - y0);
+
+      // 平均色
+      let r = 0, g = 0, b = 0, count = 0;
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        const alpha = imageData.data[i + 3];
+        if (alpha < 128) continue; // 透明/半透明像素跳过
+        r += imageData.data[i];
+        g += imageData.data[i + 1];
+        b += imageData.data[i + 2];
+        count++;
+      }
+
+      if (count === 0) {
+        // 整格全透明，标记为空
+        grid[row][col] = null;
+      } else {
+        const avg = { r: Math.round(r / count), g: Math.round(g / count), b: Math.round(b / count) };
+        const nearest = findNearestColor(avg);
+        grid[row][col] = nearest;
+
+        // 统计（空格不计入）
+        const key = nearest.hex;
+        if (!colorMap.has(key)) {
+          colorMap.set(key, { ...nearest, count: 0 });
+        }
+        colorMap.get(key).count++;
+      }
+    }
+  }
+
+  // 保存原始映射数据（颜色简化用）
+  // 深拷贝两层：行数组与**格子对象**都要独立。
+  // 必要性（见 REVIEW.md n7 / PLAN §3.4）：
+  //  ① `findNearestColor` 返回的是 PERLER_PALETTE 里的**对象引用**，
+  //     若直接存进 gridData，将来做单元格编辑就会就地改坏**全局色板**；
+  //  ② gridData 与 rawGridData 若共享行数组，"滑块回 0 恢复原始数据"
+  //     会恢复出被编辑过的内容且不可逆。
+  state.rawGridData = cloneGrid(grid);
+  // 与 rebuildColorCounts 一致地按数量降序：否则 simplify=0 与 simplify>0
+  // 两条路径给出的统计表顺序不同，拖动滑块会看到表格重排（见 REVIEW.md M1）
+  state.rawColorCounts = Array.from(colorMap.values())
+    .map(c => ({ ...c }))
+    .sort((a, b) => b.count - a.count);
+
+  // 应用颜色简化。
+  // ⚠️ **无论滑块是否为 0 都必须走 `applySimplify()`** —— 它内含
+  // 「常开近似色合并」层（针对色板自身的近同色对，见该函数 JSDoc）。
+  // 此前 `simplify <= 0` 时走的是"直接复制 raw"的旁路，导致默认状态下
+  // 近同色对原样存在、凭空多出色号（PLAN §3.1 的缺陷）。
+  applySimplify();
+
+  // ⚠️ **撤销栈必须在这里清掉**（PLAN 第三批 6c/6d）：这一轮的 gridData 是
+  //    **重新采样**的结果，上一轮的编辑点已无对应关系。不清栈就会出现
+  //    "撤销一下，格子被改回上一张图的值"这种最难看懂的数据错乱。
+  //    用 `clearEditHistory()` 而**不是** `resetEditState()`：后者连工具与
+  //    画笔色一起复位，而用户多半还要接着改，重新生成不该把他的工具收走。
+  //    提示由 `dropEditHistory()`（UI 层）负责 —— 见下方说明与 edit-ui.js。
+  const droppedStrokes = clearEditHistory();
+  if (droppedStrokes > 0) {
+    // 手工修正被静默抹掉是最容易被归因为"这工具坏了"的一类，必须如实告知。
+    // ⚠️ 提示文案里**不要**写"请用 Ctrl+Z" —— 此时栈已清空，撤销不回去了。
+    showToast(`已按新的设置重新生成图纸，之前的 ${droppedStrokes} 步手工修改已随之作废。`);
+  }
+
+  renderPreview();
+  renderStats();
+  downloadBtn.disabled = false;
+  // 打印出口与 PNG 导出**并存**（PLAN §4.2）：两者都以"图纸已生成"为前提，
+  // 故启用时机与 downloadBtn 完全一致。⚠️ 漏了这一行 ⇒ 按钮永远灰色，
+  // 用户观感就是"打印功能没做"（与 export.js 漏装配等价的表现）。
+  printBtn.disabled = false;
+  // ⚠️ 打印说明文案必须**随档位刷新**（U6）：此前 `updatePrintInfo()` 只在
+  //    "点打印"和"勾选打印色块"两条路径上被调用，于是切 29/52/78/104 后
+  //    那行字停在上一档的页数，用户必须先点一下复选框才能看到正确值
+  //    （他实测报告的就是这个反直觉现象）。落点放这里而不是 UI 层：
+  //    与 preview / stats 同属"图纸变了要跟着变"的收尾，只有一份实现。
+  refreshPrintInfo();
+  // 保存图纸（PLAN 第三批 6b）同理：它的前提同样是"已有一张图纸"
+  saveArchiveBtn.disabled = false;
+  // 播报生成结果：读屏用户此前对"图纸已生成"完全无感（见 REVIEW.md M5）
+  announce(`图纸已生成：${gw}×${gh} 网格，${state.colorCounts ? state.colorCounts.length : 0} 种颜色`);
+}
+
+/**
+ * **接管一份外部图纸**（载入存档、或将来的其它来源）：把网格装进 `state`，
+ * 并走一遍与"图片生成"**完全相同**的收尾（统计 / 预览 / 按钮启用 / 播报）。
+ *
+ * ⚠️ 为什么必须抽这个函数、而不在 UI 层照抄一遍收尾：
+ *    `generateGridCore` 的收尾有 6 件事（rebuild 统计、预览、3 个按钮启用、播报），
+ *    抄第二份的后果是**两处各自漂移** —— 典型表现就是"打印按钮在载入存档后是灰的"
+ *    这类只有用户能撞见的缺陷（本仓库对"装配代码漏搬"有专门记录，
+ *    见 export.js 里 downloadBtn 那两行）。故收尾只有一份实现。
+ *
+ * ⚠️ 与图片路径的**唯一差异**是 `applySimplify()` 不能被调用：
+ *    存档按 6a 的定案只含图纸本身，`rawGridData` **不入档**（它语义是"**采样**的
+ *    原始值"，不是"载入出来的图纸的原始值"）。直接调 `applySimplify()`
+ *    会因为它读 `state.rawGridData` 为 null 而**静默空转**，留下一个
+ *    "预览已更新、统计却还是上一张图"的不一致状态。
+ *    所以这里显式把 grid 同时作为 `gridData` 与统计的来源 —— 统计**必须**由
+ *    grid 本身重建，不能沿用上一张图的 `colorCounts`。
+ *
+ * ⚠️ 顺带把 `rawGridData` 置空并**由 UI 禁用简化滑块**（6b 的产品决策）：
+ *    留着旧图的 raw 数据会让滑块一动就把存档图纸换成上一张图的采样结果 ——
+ *    这是"改了 A 弄坏 B"里最难查的一种（数据看着来自当前图，其实不是）。
+ *
+ * @param {Array<Array<object|null>>} grid 二维网格（元素为 `{name,hex,r,g,b}` 或 null）
+ * @returns {{rows:number, cols:number}} 实际接管的尺寸
+ */
+export function adoptGrid(grid) {
+  if (!Array.isArray(grid) || grid.length === 0 || !Array.isArray(grid[0])) {
+    throw new Error('adoptGrid: 网格数据不合法');
+  }
+  const rows = grid.length;
+  const cols = grid[0].length;
+
+  // ⚠️ 再拷一份：调用方（storage.js）已经产出副本，但本函数是**公开入口**，
+  //    将来别的来源（如用户手改的 JSON）未必拷贝 —— 就地编辑一上线，
+  //    不拷贝就会把来源对象与全局色板一起改坏（PLAN §3.4 / REVIEW.md n7）。
+  state.gridData = cloneGrid(grid);
+  state.gridW = cols;
+  state.gridH = rows;
+  // 见上方说明：rawGridData 是"采样原始值"的语义，载入路径**没有**它
+  state.rawGridData = null;
+  state.rawColorCounts = null;
+  // ⚠️ 撤销栈也要清掉（PLAN 第三批 6c/6d）：载入的是一份**别的图纸**，
+  //    上一张图的编辑点在这里没有任何对应关系（尺寸都可能不同）。
+  //    不清栈的后果与"重新生成"那条一样，但更隐蔽 —— 用户会以为
+  //    "撤销"是在撤销刚载入的这张图上的操作。
+  clearEditHistory();
+  // 极端比例提示是"采样"环节的产物，载入的图纸没有经过采样 ⇒ 必须清掉，
+  // 否则会挂着上一张图的警告文本
+  state.aspectWarning = null;
+  // 载入的图纸没有经过近似色合并 ⇒ 合并告知也必须清掉（否则复用上一张图的文案）
+  state.mergedColors = [];
+  // 统计由**网格本身**重建（不是 applySimplify 的那条路径，理由见 JSDoc）
+  state.colorCounts = rebuildColorCounts(state.gridData);
+
+  renderPreview();
+  renderStats();
+  downloadBtn.disabled = false;
+  printBtn.disabled = false;
+  saveArchiveBtn.disabled = false;
+  // 同上：载入存档也换了一张图纸，打印说明必须跟着变（否则挂着上一张图的页数）。
+  // ⚠️ 这条容易被漏 —— 载入路径不走 `generateGridCore()`，两条收尾必须各自补。
+  refreshPrintInfo();
+  announce(`已载入图纸：${cols}×${rows} 网格，${state.colorCounts.length} 种颜色`);
+  return { rows, cols };
+}

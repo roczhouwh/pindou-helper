@@ -1,0 +1,6 @@
+# 本地开发残留
+test-screenshot.png
+__pycache__/
+
+# Vercel 本地链接配置（含项目 ID，不入库）
+.vercel/
