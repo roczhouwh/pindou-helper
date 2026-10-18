@@ -4,10 +4,9 @@ import { handleFile } from './upload.js';
 // ============================================================
 // js/input/camera.js — 相机（移动端拍照上传）
 // ============================================================
-// 自 app.js 的「1. 图片上传」段搬迁而来（REFACTOR §7.1 步骤 5）。
+
 //
 // ⚠️ `cameraStream` 只在本模块内读写，是**唯一可私有化**的状态之一
-//    （REFACTOR 附录 A）。步骤 0（ESM）后它会变成真正的模块私有变量。
 // ⚠️ `closeCamera()` 挂在 window 的 pagehide 与 visibilitychange 上 ——
 //    离开页面必须释放摄像头，否则手机上指示灯常亮。
 // ============================================================
@@ -64,7 +63,7 @@ export function capturePhoto() {
 
   // 复用同一个离屏 canvas，而不是每次拍照都 createElement。
   // 原实现每次新建一个全分辨率的 canvas（1920×1080 ≈ 8MB 显存），
-  // 连续拍照会累积占用 —— 在 iOS 的 canvas 内存预算下尤其危险（见 REVIEW.md m8 / PLAN §3.2）。
+  // 连续拍照会累积占用 —— 在 iOS 的 canvas 内存预算下尤其危险。
   if (!captureCanvas) captureCanvas = document.createElement('canvas');
   const canvas = captureCanvas;
 
@@ -85,7 +84,7 @@ export function capturePhoto() {
   }, 'image/jpeg', 0.92);
 }
 
-/** 拍照用的复用画布（见 REVIEW.md m8） */
+/** 拍照用的复用画布 */
 let captureCanvas = null;
 
 export function closeCamera() {

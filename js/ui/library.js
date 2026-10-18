@@ -11,7 +11,7 @@ import { announce, markActiveGridBtn } from './a11y.js';
 import { resetSimplify, setSamplingControlsEnabled } from './grid-select.js';
 
 // ============================================================
-// js/ui/library.js — 图纸存档的**界面层**（PLAN 第三批 6b）
+// js/ui/library.js — 图纸存档的**界面层**
 // ============================================================
 // 三段职责清晰分层，本模块只做中间那一段：
 //   · `js/core/serialize.js`（6a）—— 存什么、怎么版本化（纯函数）
@@ -19,7 +19,7 @@ import { resetSimplify, setSamplingControlsEnabled } from './grid-select.js';
 //   · **本模块**                —— 按钮/列表/提示，以及**载入后的界面切换**
 //
 // ⚠️ 载入路径**不能走 `showViewer()`** —— 它依赖 `state.image`，
-//    而 `generateGridCore()` 在无图时直接早返回（PLAN §5.1 开工前就记录的结构缺口）。
+//    而 `generateGridCore()` 在无图时直接早返回。
 //    故本模块自己走一条**不经过 viewer 的展示路径**：直接亮
 //    `#controlsSection` + `#previewSection` + `#statsSection`（后两者由
 //    `adoptGrid()` 的收尾点亮，与图片生成路径共用同一份收尾，不抄第二遍）。
@@ -193,7 +193,7 @@ export function saveCurrentArchive() {
   } catch (err) {
     // ⚠️ 用 showToast，不用 showError：后者写进 #uploadError（在 #uploadSection 内），
     //    而载入存档后上传区**是可见的**、上传图片后它又是隐藏的 ——
-    //    跨阶段都要能看见的提示只有 toast 一个（CLAUDE.md 有专门的坑记录）。
+    //    跨阶段都要能看见的提示只有 toast 一个。
     //    ⚠️ 这里**不做"存储不可用就提前返回"**：是否可用由 `saveArchive()` 实测
     //       （它内部会真写一次探针键），本模块缓存的那个布尔值只用于**提示文案**。
     //       多写一条前置判断的后果是"两处口径可能不一致"，而其中一处会静默挡住另一处。

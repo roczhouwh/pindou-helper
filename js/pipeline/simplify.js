@@ -4,12 +4,9 @@ import { AUTO_MERGE_DIST_SQ, state } from '../core/state.js';
 // ============================================================
 // js/pipeline/simplify.js — 颜色简化（含常开近似色合并）
 // ============================================================
-// 自 app.js 的「5.5 颜色简化」整段搬迁而来（REFACTOR §7.1 步骤 5），
-// 偿还 REFACTOR §4.4 记录的**第 1 笔技术债**：
-//   applySimplify / rebuildColorCounts / getStaticMergeMap / staticMergeCache
-//   此前未按规则 1 落位到本文件。
+// 导出：applySimplify / rebuildColorCounts / getStaticMergeMap。
 //
-// ⚠️ 两条硬约束（test-simplify.js 的 14 条断言 + 突变测试守护，不要改回去）：
+// ⚠️ 两条硬约束（不要改回去）：
 //   ① 决胜规则是「**色板序号较小者优先**」，**不是频率** ——
 //      按频率决胜会让同一张图换网格尺寸后色号漂移（实测 29×29 得 E16、52×52 得 H12）。
 //   ② 合并表必须是「**静态色板级**」（只看色板，与图上出现哪些色无关），
@@ -18,7 +15,7 @@ import { AUTO_MERGE_DIST_SQ, state } from '../core/state.js';
 // ⚠️ `AUTO_MERGE_DIST_SQ` **不**在本文件里 —— 它在 `js/core/state.js` 的常量区
 //    （与 `MAX_EXPORT_*` 放一起），本文件通过上面的 import 取用。
 //
-// 本文件是原生 ES module（步骤 0 已完成）：依赖由上方 import 显式声明，
+// 本文件是原生 ES module：依赖由上方 import 显式声明，
 // 不再靠"共享全局词法环境"。
 // ============================================================
 // ============================================================
@@ -28,7 +25,7 @@ import { AUTO_MERGE_DIST_SQ, state } from '../core/state.js';
 /**
  * 深拷贝一份网格：行数组与格子对象都不共享。
  * 关键点是格子对象 —— `findNearestColor()` 返回的是 PERLER_PALETTE 里的
- * 对象引用，浅拷贝会让格子仍然指向全局色板（见 REVIEW.md n7）。
+ * 对象引用，浅拷贝会让格子仍然指向全局色板。
  */
 export function cloneGrid(grid) {
   return grid.map((row) => row.map((cell) => (cell ? { ...cell } : null)));
@@ -51,7 +48,7 @@ export function rebuildColorCounts(grid) {
 /**
  * 基于 rawGridData 重新计算简化后的 gridData 和 colorCounts。
  *
- * 合并分**两层**，这是 PLAN §3.1 定下的结构（勿合并回单一层）：
+ * 合并分**两层**，（勿合并回单一层）：
  *
  * ┌ ① **常开近似色合并** —— 恒定为 `AUTO_MERGE_DIST_SQ`（dist ≤ 4），与滑块无关。
  * │   针对的是**色板自身的缺陷**：221 色里存在几对肉眼无法分辨的近同色
@@ -63,7 +60,7 @@ export function rebuildColorCounts(grid) {
  * │
  * └ ② **滑块合并** —— `simplify > 0` 时的用户主动压缩，在层 ① 之上继续合并。
  *
- * ⚠️ **决胜规则：色板序号较小者优先，不按采样频率**（PLAN §3.1 已决）。
+ * ⚠️ **决胜规则：色板序号较小者优先，不按采样频率**。
  * 旧实现按频率决胜（低频并入高频），后果是**同一张图换网格尺寸后色号会漂移** ——
  * 采样网格一变、频率排序就变、主色随之改变。实测证据（改动前基线，可复现）：
  * 同一张近白测试图在 `simplify=30%` 下，**29×29 得 `E16`、52×52 得 `H12`**。
@@ -87,7 +84,7 @@ export function applySimplify() {
   if (maxDistSq <= 0) {
     // 当前不可达（AUTO_MERGE_DIST_SQ 恒 > 0），保留以防该常量将来被改成 0。
     // 早返回会让 gridData 停留在旧值、与新的 simplify 不一致 ——
-    // 必须补齐 state 同步，而不是留一个静默退出（见 REVIEW.md m13）
+    // 必须补齐 state 同步，而不是留一个静默退出
     state.gridData = cloneGrid(state.rawGridData);
     state.colorCounts = state.rawColorCounts;
     state.mergedColors = [];
@@ -100,7 +97,7 @@ export function applySimplify() {
   // 深拷贝一份原始网格（格子对象也要独立，见 cloneGrid 注释）
   const grid = cloneGrid(raw);
 
-  // 图上出现了哪些色号 —— **滑块层**的选择范围（见 applySimplify 的 JSDoc「U3」段）
+  // 图上出现了哪些色号 —— **滑块层**的选择范围（见 `getStaticMergeMap` 的说明）
   const presentNames = presentNamesOf(raw);
   const mergeMap = buildMergeMap(maxDistSq, presentNames);
 
@@ -112,7 +109,7 @@ export function applySimplify() {
       if (cell && mergeMap.has(cell.hex)) {
         const tgt = paletteMap.get(mergeMap.get(cell.hex));
         // 拷贝而非直接引用色板对象：直接赋值会让 gridData 里混入全局色板引用，
-        // 将来单元格编辑会就地改坏色板（见 REVIEW.md n7）
+        // 将来单元格编辑会就地改坏色板
         if (tgt) grid[r][c] = { ...tgt };
       }
     }
@@ -142,10 +139,9 @@ export function applySimplify() {
 }
 
 /**
-/**
- * `getStaticMergeMap()` 的「阈值 + 图上出现的色」→ 合并表的缓存。
+ * 「阈值 + 图上出现的色」→ 合并表的缓存。
  *
- * ⚠️ **缓存键必须带上"图上有哪些色"**（U3 之后）：同一阈值在不同图片上
+ * ⚠️ **缓存键必须带上"图上有哪些色"**：同一阈值在不同图片上
  * 选出的目标可以不同，只拿 distSq 当键会让第二张图复用第一张图的表 ——
  * 症状是新色号又回来了，且**换张图/改个尺寸就变**，极难排查。
  *
@@ -169,19 +165,17 @@ function presentNamesOf(grid) {
 /**
  * 合并表：`source hex → target hex`。
  *
- * ⚠️ **两层必须用两种规则，不要"统一"成一种**（U3 的选型结论，实测数据见
- * `.pindou-devtools/probe-u3-drift.js`）：
- *
+ * ⚠️ **两层必须用两种规则，不要"统一"成一种**（选型结论：同一张图 29/52 两档的目标色号确实不同）：
  * ┌ ① **常开层仍是静态色板级**（与 `presentNames` 无关）——
  * │   它是对"色板自身缺陷"的数据修正，不是用户的强度选择。若改成"只从图上有的色里选"，
  * │   **纯 H12 图会输出 H12 而不是 E16**，色号重新随图像内容漂移
- * │   （`test-simplify.js` 有一条专门区分这两种规则的用例守着）。
+ * │   （有一条专门区分这两种规则的用例守着）。
  * │
- * └ ② **滑块层限定在"图上已出现的色"内**（U3 的产品决策）——
+ * └ ② **滑块层限定在"图上已出现的色"内**——
  *    用户反馈：「简化过程不应该出现新的颜色，而是用现有区域内的颜色做简化」。
  *    实测：静态规则在 30% 档就凭空造出 D4、D13、C8 等图上没有的色号。
  *
- * ⚠️ **为什么不直接用 PLAN 记的候选 A / C** —— 两者都被选型硬判据淘汰：
+ * ⚠️ **为什么不用更简单的候选方案 A / C** —— 两者都被选型硬判据淘汰：
  * 同一张红色渐变图，29 档与 52 档的**同一个来源色映射到了不同目标**
  * （A：`E13` 29档→D21 / 52档→D14；C 另有 `D21`、`F15`、`F8` 同类漂移）。
  * 再叠加一道"跨尺寸统一决胜"也补不回来：色板级的统一目标**本就是静态规则本身**，

@@ -7,19 +7,18 @@ import { updateSelectionBox } from './selection.js';
 // ============================================================
 // js/viewer/viewer.js — 图片查看器（画布渲染与坐标换算）
 // ============================================================
-// 自 app.js 的「2. 图片查看器」整段搬迁而来（REFACTOR §7.1 步骤 5）。
+
 // 含 computeImageRect / showViewer / resizeViewerCanvas / renderViewer /
 //    getImageCoords / scheduleViewerRedraw。
 //
 // ⚠️ `computeImageRect(w, h)` **必须保留 w/h 参数**，不要在函数里自取尺寸：
 //    三个调用方的宽度来源本就不同（viewerCanvas.width vs getBoundingClientRect().width），
-//    在 iOS 的 0 尺寸时序窗口内不相等。让它自己取会**改回已修的 iOS 缺陷**
-//    （test-compute-image-rect.js 有静态断言 + 负向对照守护）。
+//    在 iOS 的 0 尺寸时序窗口内不相等。让它自己取会**改回已修的 iOS 缺陷**。
 //
 // ⚠️ `resizeViewerCanvas()` 的零尺寸 rAF 重试不要删：
 //    iOS 14 在 hidden→visible 切换后 getBoundingClientRect 可能返回 0。
 //
-// 本文件是原生 ES module（步骤 0 已完成）：依赖由上方 import 显式声明，
+// 本文件是原生 ES module：依赖由上方 import 显式声明，
 // 不再靠"共享全局词法环境"。
 // ============================================================
 // ============================================================
@@ -30,7 +29,7 @@ import { updateSelectionBox } from './selection.js';
  * 计算图片在画布中的**实际绘制矩形**（contain 适配 + zoom/pan 变换）。
  *
  * 这是整个 viewer 的坐标换算基准，此前在 `renderViewer` / `getImageCoords` /
- * `updateSelectionBox` 里**重复了三份**（REFACTOR §3.1 重复项 #1）。抽取后
+ * `updateSelectionBox` 里**重复了三份**。抽取后
  * 三处共用同一份数学，避免"改了一处、漏了另两处"。
  *
  * @param {number} w 画布宽（**调用方决定来源**，见下方 ⚠️）
@@ -38,7 +37,7 @@ import { updateSelectionBox } from './selection.js';
  * @returns {{imgX:number, imgY:number, scaledW:number, scaledH:number}}
  *          图片左上角坐标与缩放后的宽高（client 像素）
  *
- * ⚠️ **为什么把 w/h 做成参数、而不在函数内自己取**（REFACTOR §7.4 步 2）：
+ * ⚠️ **为什么把 w/h 做成参数、而不在函数内自己取**：
  * 三个调用方的宽度来源**本来就不同**，且这个差异**必须保留**：
  *   - `renderViewer`        → `viewerCanvas.width`（canvas 位图尺寸）
  *   - `getImageCoords`      → `getBoundingClientRect().width`
@@ -79,9 +78,9 @@ export function showViewer() {
   previewSection.hidden = true;
   statsSection.hidden = true;
   downloadBtn.disabled = true;
-  // 打印出口与 PNG 导出同启用时机（PLAN §4.2）：新图尚未生成图纸，两者都必须禁用
+  // 打印出口与 PNG 导出同启用时机：新图尚未生成图纸，两者都必须禁用
   printBtn.disabled = true;
-  // 存档模式在此退出（PLAN 第三批 6b）：showViewer 是**任何**载入原图路径的
+  // 存档模式在此退出：showViewer 是**任何**载入原图路径的
   // 唯一必经之处（handleFile 只在这里收尾），收在这里才不会漏掉某条分支。
   // ⚠️ 漏了它的表现是"上传了新图，但网格尺寸按钮与简化滑块仍是灰的、
   //    横幅还挂着上一份存档的说明"——只有用户能撞见。
@@ -89,7 +88,7 @@ export function showViewer() {
   viewerHint.hidden = false;
   viewerHint2.hidden = isTouchDevice;
   viewerHint3.hidden = !isTouchDevice;
-  // 键盘提示与触摸提示同源同判据：触摸设备没有物理键盘，显示它只是噪音（见 REVIEW.md M8）
+  // 键盘提示与触摸提示同源同判据：触摸设备没有物理键盘，显示它只是噪音
   viewerHint4.hidden = isTouchDevice;
   selectionBox.classList.add('visible');
 
@@ -168,7 +167,7 @@ export function getImageCoords(clientX, clientY) {
 /**
  * 合并同一帧内的视图重绘。
  *
- * 背景（见 REVIEW.md §六「性能耦合」）：pointermove 一个回调并联了
+ * 背景：pointermove 一个回调并联了
  * isDragging / isResizing / isPanning 三套逻辑，每套都各调一次
  * updateSelectionBox() + renderViewer()，**无节流、无 rAF 合并** ——
  * 移动端每次指针移动可能触发 2 次全画布重绘。

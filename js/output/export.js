@@ -6,7 +6,7 @@ import { FONT_STACK, drawGrid, drawRuler, rulerMetrics } from '../pipeline/rende
 // ============================================================
 // js/output/export.js — PNG 导出与分享
 // ============================================================
-// 自 app.js 的「8. PNG 下载」函数群搬迁而来（REFACTOR §7.1 步骤 5）。
+
 //
 // ⚠️ **自适应倍率**是 C2 的根治手段，不要改回固定 2x：
 //    期望 MAX_EXPORT_DPR=2，若超出设备上限（>16.78MP 或单边 >4096）自动降到 1x。
@@ -14,19 +14,19 @@ import { FONT_STACK, drawGrid, drawRuler, rulerMetrics } from '../pipeline/rende
 //    降档会如实写在 #previewInfo 上，**不静默**。
 //
 // ⚠️ `computeDownloadSize()` 里标尺边距必须**同时**进入 canvasW/canvasH 与 gridY ——
-//    只进其一会出现"标尺画不下"或"与预检漂移"（REFACTOR §4.2 硬约束 1）。
+//    只进其一会出现"标尺画不下"或"与预检漂移"。
 //
 // ⚠️ 失败提示必须用 `showToast`（全局 toast），**不能用 `showError`** ——
 //    后者写进 #uploadError，而 showViewer() 已把 #uploadSection 隐藏，消息会静默丢失。
 //
-// 本文件是原生 ES module（步骤 0 已完成）：依赖由上方 import 显式声明，
+// 本文件是原生 ES module：依赖由上方 import 显式声明，
 // 不再靠"共享全局词法环境"。
 // ============================================================
 
 // ---- 按钮装配（随函数群一起搬迁；**不要漏**）----
 // ⚠️ 这两行曾在搬迁中被漏掉：它们原本夹在「8. PNG 下载」段的函数之间，
 //    只搬"函数群"而把这段装配代码留在原地，就表现为"点下载没反应"
-//    （toBlob 从不回调、toast 也不出现）。见 test-export.js 的 4 档下载断言。
+//    （toBlob 从不回调、toast 也不出现）。。
 downloadBtn.addEventListener('click', () => {
   if (!state.gridData) return;
   downloadPNG();
@@ -44,7 +44,7 @@ export function sharePNG() {
   const rows = grid.length;
   const cols = grid[0].length;
 
-  // 预检放在渲染之前；与 downloadPNG 走同一套尺寸判定（见 REVIEW.md C2）
+  // 预检放在渲染之前；与 downloadPNG 走同一套尺寸判定
   if (!checkExportSize(cols, rows)) return;
   // 再渲染下载画布，供分享使用
   renderDownloadCanvas();
@@ -76,7 +76,7 @@ export function sharePNG() {
 /**
  * 计算下载画布的实际像素尺寸。
  * 抽出来供 renderDownloadCanvas 与 checkExportSize 共用，
- * 避免预检用的尺寸与真实渲染尺寸各自演算而漂移（见 REVIEW.md C2）。
+ * 避免预检用的尺寸与真实渲染尺寸各自演算而漂移。
  *
  * 倍率自适应：先按期望倍率算，若超出设备上限（面积 or 单边）则逐级下调。
  * 这是 C2 的根治手段 —— 此前 78/104 只能"拦截 + 提示"，
@@ -86,7 +86,7 @@ export function sharePNG() {
  * @param {boolean} [rulerOverride] 强制指定"是否含标尺边距"，
  *        省略 = 用 `state.rulerEnabled`（正常路径）。
  *        ⚠️ 只给 `rulerGutterNote()` 用来算"若切开/关上标尺，尺寸会差多少" ——
- *        **几何计算不得据此改变**，关闭仍是 `gutter=0`（REFACTOR 标尺硬约束 2）。
+ *        **几何计算不得据此改变**，关闭仍是 `gutter=0`。
  */
 export function computeDownloadSize(rulerOverride) {
   const rows = state.gridData.length;
@@ -112,7 +112,7 @@ export function computeDownloadSize(rulerOverride) {
 
   // 行列标尺边距（关闭时为 0 → 与改动前逐像素一致）。
   // ⚠️ 它同时进入 canvasW/canvasH，因此 **dpr 判定与预检都自动跟着走**，
-  // 不需要在 checkExportSize 里再补一次（那会造成"预检与实际渲染漂移"，见 REVIEW.md C2）。
+  // 不需要在 checkExportSize 里再补一次（那会造成"预检与实际渲染漂移"）。
   // 实测四档：29/52 仍 2x，78/104 仍 1x —— 边距没有把任何一档挤下 4096 单边或 16.78MP。
   const ruler = rulerOn ? rulerMetrics(cellW, cellH) : null;
   const gutter = ruler ? ruler.margin : 0;
@@ -137,7 +137,7 @@ export function computeDownloadSize(rulerOverride) {
 
 /**
  * 挑选本设备能承受的最大导出倍率。
- * 同时受两个约束（见 PLAN §3.2）：**总像素 ≤ 16.78MP** 与 **单边 ≤ 4096**。
+ * 同时受两个约束：**总像素 ≤ 16.78MP** 与 **单边 ≤ 4096**。
  * 取 1/2 的整数档（2 → 1），保证 PNG 尺寸是整数、不会出现半像素模糊。
  * 返回 1 是下限：1x 下最大网格（104×104）约 9.6MP，仍在预算内，
  * 因此**不存在"只能拒绝导出"的档位**。
@@ -198,7 +198,7 @@ export function exportScaleNote() {
 }
 
 /**
- * **行列标尺边距对导出尺寸的影响** —— 用户可读的一句说明（UAT-1 U2）。
+ * **行列标尺边距对导出尺寸的影响** —— 用户可读的一句说明。
  *
  * 起因：开关标尺会改变导出画布像素尺寸（29 档实测 `1864×1938` ↔ `1864×1888`，
  * 差 50px），而 `#previewInfo` 只体现为**数字变了**，通篇没有一个字说明这 50px 从哪来。
@@ -208,7 +208,7 @@ export function exportScaleNote() {
  *
  * ⚠️ **只改文案，绝不改几何**：关闭标尺时 `gutter` 必须仍为 0，
  * 四档画布尺寸要逐像素回到基线（`932×972 / 1488×1616 / 2216×2344 / 2944×3072`）
- * —— 见 CLAUDE.md「行列标尺」硬约束 2。想让用户知道边距存在，
+ * —— 硬约束：想让用户知道边距存在，
  * 只能靠这句话，不能靠"干脆都加上边距"。
  *
  * ⚠️ 差值用**两次调用 `computeDownloadSize()` 相减**得到，不在这里另算
@@ -301,7 +301,7 @@ export function renderDownloadCanvas() {
     cellW,
     cellH,
     gridLineColor: 'rgba(0,0,0,0.25)',
-    hatchEmptyCells: false,     // ⚠️ 预览画斜线、导出不画（§3.2 #3 定调：保持差异）
+    hatchEmptyCells: false,     // ⚠️ 预览画斜线、导出不画
     textMinCell: null,          // null = 不受阈值限制，总是画色号
     roundFontSize: true,
   });
@@ -354,13 +354,13 @@ export function downloadPNG() {
   const cols = state.gridData[0].length;
   const rows = state.gridData.length;
 
-  // 预检放在渲染之前：超限时不必先分配一块用不了的画布（见 REVIEW.md C2）
+  // 预检放在渲染之前：超限时不必先分配一块用不了的画布
   if (!checkExportSize(cols, rows)) return;
   renderDownloadCanvas();
 
   // iOS Safari 不支持 blob URL 的 <a download>，改为新窗口打开让用户长按保存。
   // 必须在用户手势的调用栈内同步开窗 —— toBlob 回调是异步的，
-  // 在那里 window.open 会被弹窗拦截（见 REVIEW.md C2）。
+  // 在那里 window.open 会被弹窗拦截。
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const iosWindow = isIOS ? window.open('', '_blank') : null;
@@ -374,7 +374,7 @@ export function downloadPNG() {
     if (!blob) {
       if (iosWindow) iosWindow.close();
       // 走到这里说明即使降档后设备仍拒绝出图（内存紧张等）。
-      // 提示要给出**下一步动作**，不能只说"失败了"（见 REVIEW.md C2）
+      // 提示要给出**下一步动作**，不能只说"失败了"
       showToast(
         '设备未能生成 PNG（可能是内存不足）。请关闭其它标签页后重试，' +
         '或改用更小的网格尺寸。'

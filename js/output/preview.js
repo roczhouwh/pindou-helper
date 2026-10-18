@@ -6,13 +6,13 @@ import { drawGrid, drawRuler, rulerMetrics } from '../pipeline/render.js';
 // ============================================================
 // js/output/preview.js — 图纸预览渲染
 // ============================================================
-// 自 app.js 的「6. 图纸预览」整段搬迁而来（REFACTOR §7.1 步骤 5）。
+
 //
 // ⚠️ `fitPreviewGrid()` 的**迭代收敛**不要"优化"成一次估算：
 //    标尺边距是格子尺寸的函数，用"缩放前的边距"估算会溢出容器（实测 1~7px）。
 //    MIN_SCALE=0.35 是既有产品决策（极窄屏宁可横向滚动），不是缺陷。
 //
-// 本文件是原生 ES module（步骤 0 已完成）：依赖由上方 import 显式声明，
+// 本文件是原生 ES module：依赖由上方 import 显式声明，
 // 不再靠"共享全局词法环境"。
 // 它调用的 drawGrid / drawRuler / rulerMetrics 来自 js/pipeline/render.js。
 // ============================================================
@@ -23,7 +23,7 @@ import { drawGrid, drawRuler, rulerMetrics } from '../pipeline/render.js';
 /**
  * 预览网格的**小屏适配**尺寸计算（含标尺边距）。
  *
- * ⚠️ 为什么要迭代收敛（实测数据见 `.pindou-devtools/probe-ruler-scale.js`）：
+ * ⚠️ 为什么要迭代收敛：
  * 标尺边距 `margin` 是**格子尺寸的函数** —— 缩放后格子变小，边距也跟着变小。
  * 若只用"缩放前"的边距去算缩放比，最终的 `gutter` 会小于估算值，
  * 于是画布比容器**窄**（无害但浪费空间）；反过来若先算出的比例再取整，
@@ -81,7 +81,7 @@ export const PREVIEW_PADDING = 4;
  * 预览版面的**纯计算**：给定网格尺寸与可用宽度，算出画布尺寸、格子尺寸、
  * 标尺边距与**网格本体左上角**。
  *
- * ⚠️ **为什么要抽出来**（PLAN 第三批 6c 单元格编辑）：
+ * ⚠️ **为什么要抽出来**（单元格编辑）：
  *    命中测试（点在哪一格）必须与绘制用**同一份几何**。若在编辑侧另写一遍
  *    "canvas 减去 padding 再除以列数"，两处就会各自漂移 —— 而漂移的表现是
  *    **点这一格、改的是旁边那一格**，属于最难察觉、后果最严重的一类缺陷
@@ -90,7 +90,7 @@ export const PREVIEW_PADDING = 4;
  * ⚠️ 本函数**不读 `state`、不碰 DOM、不绘制** —— 可用宽度由调用方给出
  *    （`previewLayoutFor()` 负责从容器量取）。这样它才能被测试直接驱动。
  *
- * ⚠️ 数学与抽出前**逐像素一致**：`test-ruler.js` 有像素级断言守着
+ * ⚠️ 数学与抽出前**逐像素一致**：有像素级断言守着
  *    （画布尺寸、gutter、标尺位置），"顺手优化"会改动用户可见产出。
  *
  * @param {number} cols 列数
@@ -184,7 +184,7 @@ export function hitTestCell(localX, localY, layout) {
 /**
  * 两格之间**经过的全部格子**（含 `to`，不含 `from`）。
  *
- * ⚠️ **为什么必须有它**（PLAN 第三批 6c 实测踩到）：
+ * ⚠️ **为什么必须有它**（实测踩到）：
  *    指针事件是**离散采样**的 —— 浏览器按帧派发 `pointermove`，快速拖动时两次事件
  *    之间可能跨过好几格。只处理"事件落在哪一格"会在拖拽路径上留下**断点**：
  *    用户画了一条线，图纸上却是虚线。104×104 在小屏上格子只有几像素，尤其明显。
@@ -215,7 +215,7 @@ export function cellsBetween(from, to) {
   const seen = new Set();
   // ⚠️ 起点必须先排除：半格步进在"相邻两格"（steps=1）时，中点 `t=0.5` 会
   //    `round` **回到起点那一格**，于是返回里混进了 from。
-  //    实测踩到（`test-edit.js` 有断言）。它当场无害（调用方已经涂过 from、
+  //    实测踩到。它当场无害（调用方已经涂过 from、
   //    `stroke.seen` 也会去重），但会让"不含起点"这条契约变成假的 ——
   //    而契约一旦可以失真，将来就有人据此写出错的假设。
   const fromKey = `${from.row},${from.col}`;
@@ -266,7 +266,7 @@ export function renderPreview() {
     cellW,
     cellH,
     gridLineColor: 'rgba(0,0,0,0.15)',
-    hatchEmptyCells: true,      // ⚠️ 导出刻意不画（§3.2 #3），详见 drawGrid 的差异表
+    hatchEmptyCells: true,      // ⚠️ 导出刻意不画，详见 drawGrid 的差异表
     textMinCell: 10,
     roundFontSize: false,
   });
@@ -285,13 +285,12 @@ export function renderPreview() {
   previewInfo.textContent = `${cols}×${rows} 网格 · ${Math.round(cellW)}×${Math.round(cellH)}px/格${exportScaleNote()}${rulerGutterNote()}`;
   // 近似色合并是**静默改变用户产出**的行为：用户会发现自己按图买的色号
   // （如 H12）在图纸上根本不存在。必须如实告知**并给出替代色号** ——
-  // 只说"H12 没了"而不说"改用 E16"等于没说
-  // （CLAUDE.md：用户可感知的输出必须落在用户看得见的地方）。
+  // 只说"H12 没了"而不说"改用 E16"等于没说。
   if (state.mergedColors && state.mergedColors.length) {
     const list = state.mergedColors.map((m) => `${m.from}→${m.to}`).join('、');
     previewInfo.textContent += ` · 已合并近似色：${list}`;
   }
-  // 极端比例提示：与预览信息同处，用户一眼能看到（见 REVIEW.md M9）
+  // 极端比例提示：与预览信息同处，用户一眼能看到
   previewInfo.classList.toggle('preview-warning', !!state.aspectWarning);
   if (state.aspectWarning) {
     previewInfo.textContent += ` ⚠️ ${state.aspectWarning}`;

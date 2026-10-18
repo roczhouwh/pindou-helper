@@ -10,14 +10,14 @@ import { renderViewer, resizeViewerCanvas } from '../viewer/viewer.js';
 // ============================================================
 // js/ui/a11y.js — 无障碍播报与键盘通路
 // ============================================================
-// 自 app.js 的「工具函数」段搬迁而来（REFACTOR §7.1 步骤 5）。
+
 // 含：announce（aria-live 播报）/ markActiveGridBtn / 键盘操作选框 / clamp。
 //
 // ⚠️ `announce()` 必须**先清空再写入**：相同的字符串连续写入不会触发 aria-live 播报。
 // ⚠️ 键盘通路是 WCAG 2.1.1（A 级）要求，C3 补的；不要删。
 //    viewer 区域可聚焦（tabindex 由 HTML 提供），聚焦后才响应，避免抢占页面滚动。
 //
-// 本文件是原生 ES module（步骤 0 已完成）：依赖由上方 import 显式声明，
+// 本文件是原生 ES module：依赖由上方 import 显式声明，
 // 不再靠"共享全局词法环境"。
 // ============================================================
 // ============================================================
@@ -26,7 +26,7 @@ import { renderViewer, resizeViewerCanvas } from '../viewer/viewer.js';
 
 /**
  * 向 #liveStatus 写入一条播报。读屏会念出来，视觉上不可见。
- * 用于生成完成、尺寸变化等「用户看不见但需要知道」的状态（见 REVIEW.md M5）。
+ * 用于生成完成、尺寸变化等「用户看不见但需要知道」的状态。
  */
 let liveTimer = null;
 export function announce(msg) {
@@ -38,7 +38,7 @@ export function announce(msg) {
   liveTimer = setTimeout(() => { el.textContent = msg; }, 60);
 }
 
-/** 网格尺寸按钮的 aria-pressed 与 active class 必须同步（见 CLAUDE.md 双保险思路） */
+/** 网格尺寸按钮的 aria-pressed 与 active class 必须同步 */
 export function markActiveGridBtn(w) {
   $$('.grid-btn').forEach((b) => {
     const on = b.dataset.w === String(w);
@@ -61,7 +61,7 @@ $('#resetSelectionBtn').addEventListener('click', () => {
 });
 
 // ============================================================
-// 键盘操作选框（见 REVIEW.md C3）
+// 键盘操作选框
 // 此前选框的全部操作只由指针事件驱动，键盘用户**无法完成"框选区域"**
 // 这一核心用例（WCAG 2.1.1 A 级失败）。这里补一条键盘通路：
 //   方向键        移动选框

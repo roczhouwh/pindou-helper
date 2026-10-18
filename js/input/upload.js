@@ -9,10 +9,10 @@ import { showViewer } from '../viewer/viewer.js';
 // ============================================================
 // js/input/upload.js — 图片上传（选择/拖拽/相机入口）与阶段提示
 // ============================================================
-// 自 app.js 的「1. 图片上传」段搬迁而来（REFACTOR §7.1 步骤 5）。
+
 // 含 handleFile / showError / showToast 与上传区的全部监听器。
 //
-// ⚠️ **showError 与 showToast 用途不同，不要混用**（CLAUDE.md 有专门的坑记录）：
+// ⚠️ **showError 与 showToast 用途不同，不要混用**：
 //    · showError(msg) → #uploadError，**仅上传阶段可用**
 //    · showToast(msg) → #toast（position:fixed，独立于所有分区），**上传之后一律用它**
 //    原因：showViewer() 会设 uploadSection.hidden = true，
@@ -48,7 +48,7 @@ cameraInput.addEventListener('change', (e) => {
 // （相机相关已迁至 js/input/camera.js）
 
 // 页面被隐藏 / 关闭时必须释放摄像头，否则相机指示灯常亮、
-// 且在 iOS 上会一直占用设备（见 REVIEW.md M3）
+// 且在 iOS 上会一直占用设备
 //
 // ⚠️ **必须包一层箭头函数，不能直接传 `closeCamera`**：
 //    直接传会在**模块顶层立即求值** `closeCamera` —— 这在裸 <script> 下只是加载顺序问题，

@@ -2,24 +2,24 @@ import { state } from '../core/state.js';
 import { rebuildColorCounts } from './simplify.js';
 
 // ============================================================
-// js/pipeline/edit.js — 单元格编辑的**模型层**（PLAN 第三批 6c / 6d）
+// js/pipeline/edit.js — 单元格编辑的**模型层**
 // ============================================================
 // 职责边界（与 6b 的三层分工同构，**不要互相越界**）：
 //   · **本模块**            —— 改哪个格子、怎么改、撤销栈怎么记（**不碰 DOM**）
 //   · `js/output/preview.js`—— 预览版面几何（`computePreviewLayout` / `hitTestCell`）
 //   · `js/ui/edit-ui.js`    —— 指针事件 / 工具栏 / 统计表选色（**不自己改 gridData**）
 //
-// ⚠️ **四条硬约束**（`test-edit.js` + `probe-edit-mutation.js` 守护）：
+// ⚠️ **四条硬约束**：
 //
 // 1. **写入的格子必须是副本，不能直接塞色板对象**。
-//    这是 PLAN §3.4「三重别名」缺陷的**第四个入口**（前三次：采样路径 / 反序列化 /
+//    这是「三重别名」缺陷的**第四个入口**（前三次：采样路径 / 反序列化 /
 //    adoptGrid）。`state.editColor` 即使来自统计表（那是 `rebuildColorCounts` 的产物、
 //    已经是副本），本模块仍逐次 `{ ...color }` —— 因为**调用方不可信**，
 //    而一旦某个格子指向全局色板，下一次编辑就会就地改坏**所有后续生成的图**。
 //
-// 2. **撤销栈是独立的，绝不能用 `rawGridData`**（PLAN §5.1 明确要求）。
+// 2. **撤销栈是独立的，绝不能用 `rawGridData`**。
 //    `rawGridData` 的语义是"**采样**原始值"，而载入存档后它**是 null**
-//    （§3.7 的载入路径刻意不重建它）。拿它当撤销栈会在"无原图模式"下当场拿到 null。
+//    。拿它当撤销栈会在"无原图模式"下当场拿到 null。
 //    本模块的栈只记**每次改动的前后值**，与数据来源无关。
 //
 // 3. **"改了但值没变"不许进栈**（同值画笔、拖过同一格两次）。
@@ -127,8 +127,7 @@ export function inBounds(row, col, cols) {
  * 网格是否已应用过编辑（有编辑就必须禁用简化滑块，见 `js/ui/grid-select.js`）。
  *
  * ⚠️ 判据是 `editIndex > 0`（**还有未撤销的编辑**），不是 `editHistory.length > 0`：
- *    撤销掉全部编辑后简化滑块应当**恢复可用**，否则用户被永久锁住
- *    （`test-edit.js` 有对应断言）。
+ *    撤销掉全部编辑后简化滑块应当**恢复可用**，否则用户被永久锁住。
  */
 export function hasAppliedEdits() {
   return state.editIndex > 0;
@@ -155,8 +154,8 @@ function syncColorCounts() {
  *    不拷贝就会有两条独立的坏路径：
  *      ① 之后**任何人**改动那个对象，画笔色会被悄悄改掉；
  *      ② 与 `copyCell()` 配合，涂上去的格子会与全局色板共享引用 ——
- *         改一格就改坏**所有后续生成的图**（PLAN §3.4 三重别名）。
- *    故这里与 `copyCell()` 是**两道独立的防线**，由 `test-edit.js` 分别守护。
+ *         改一格就改坏**所有后续生成的图**。
+ *    故这里与 `copyCell()` 是**两道独立的防线**。
  *
  * @param {{name:string,hex:string,r:number,g:number,b:number}|null} color
  * @returns {{name:string,hex:string}|null} 实际记录下来的颜色（供界面显示色号）

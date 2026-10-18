@@ -1,7 +1,7 @@
 import { DOC_FORMAT, DOC_VERSION, buildDoc, deserializeDoc, serializeDoc } from './serialize.js';
 
 // ============================================================
-// js/core/storage.js — 图纸存档的**存储层**（PLAN 第三批 6b）
+// js/core/storage.js — 图纸存档的**存储层**
 // ============================================================
 // 职责边界：本模块只做「一份/多份图纸怎么落到 localStorage、怎么读回来」。
 //   · **不做序列化** —— 那是 6a 的 `js/core/serialize.js`（纯函数，已就绪）；
@@ -94,7 +94,7 @@ export class StorageError extends Error {
  *    `typeof localStorage !== 'undefined'` 会把这种情况判成"可用"，
  *    然后用户在点保存时才失败。
  *
- * ⚠️⚠️ **两种失败原因的区分是本函数存在的另一半理由**（由 `test-library.js` 实测抓出）：
+ * ⚠️⚠️ **两种失败原因的区分是本函数存在的另一半理由**：
  *    隐私模式与"空间真的满了"**抛的是同一个 `QuotaExceededError`**，
  *    但用户该做的事完全不同（前者无解、后者删几份就行）。
  *    判据：**写入失败时，我们自己的键里是否已经有数据** ——
@@ -390,7 +390,7 @@ export function saveArchive(name, grid, opts = {}) {
   const built = buildDoc(grid);
 
   // ⚠️ 局部变量名**不要叫 `state`**：本模块的卖点之一就是"不写 `state`"
-  //    （见文件头与 test-library.js 的静态判据），用一个同名局部变量会让
+  //    （见文件头），用一个同名局部变量会让
   //    "本文件里有没有碰全局 state"这件事**无法靠阅读与静态检查判断**。
   const lib = readLibrary();
   if (!lib.available) {

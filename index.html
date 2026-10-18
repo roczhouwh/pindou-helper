@@ -59,10 +59,10 @@
       <p class="upload-error" id="uploadError" hidden></p>
     </section>
 
-    <!-- ====== 图纸存档（PLAN 第三批 6b） ======
+    <!-- ====== 图纸存档 ======
          ⚠️ 本区**刻意独立于 #uploadSection**（不是它的子元素）：
          showViewer() 会把 #uploadSection 整体 hidden，而"载入一份存档"
-         必须在上传图片**之前**就能用 —— 存档按 6a 的定案只含图纸本身、不含原图，
+         必须在上传图片**之前**就能用 —— 存档只含图纸本身、不含原图，
          所以「打开页面 → 直接载入存档 → 查看/导出/打印」是一条完整且必要的路径。 -->
     <section class="archive-section" id="archiveSection">
       <h2 class="section-title">图纸存档</h2>
@@ -90,10 +90,10 @@
         <button class="btn btn-sm" id="resetBtn">🔄 重新上传</button>
         <button class="btn btn-sm" id="resetSelectionBtn">↩ 重置选框</button>
       </div>
-      <!-- tabindex 让键盘用户能聚焦到选框区域并用方向键操作（见 REVIEW.md C3） -->
+      <!-- tabindex 让键盘用户能聚焦到选框区域并用方向键操作 -->
       <div class="viewer-wrapper" id="viewerWrapper" tabindex="0"
            aria-label="框选区域：用方向键移动选框，Shift 加方向键调整大小">
-        <!-- 画布需要可访问名称：读屏用户听到的是"框选区域"，而不是无名的 canvas（见 REVIEW.md M4） -->
+        <!-- 画布需要可访问名称：读屏用户听到的是"框选区域"，而不是无名的 canvas -->
         <canvas id="viewerCanvas" role="img" aria-label="图片查看器"></canvas>
         <!-- 矩形选框覆盖层 -->
         <div class="selection-overlay" id="selectionOverlay">
@@ -113,14 +113,14 @@
       <p class="viewer-hint" id="viewerHint">✨ 在图片上拖拽框选目标区域</p>
       <p class="viewer-hint" id="viewerHint2">🖱 滚轮缩放 · 右键拖拽平移</p>
       <p class="viewer-hint" id="viewerHint3" hidden>📱 双指缩放/平移</p>
-      <!-- 键盘操作提示：仅对键盘用户可见（C3 的键盘通路，见 REVIEW.md C3） -->
+      <!-- 键盘操作提示：仅对键盘用户可见（键盘通路） -->
       <p class="viewer-hint" id="viewerHint4">⌨ 方向键移动选框 · Shift+方向键调整大小</p>
     </section>
 
     <!-- ====== 控制栏 ====== -->
     <section class="controls-section" id="controlsSection" hidden>
-      <!-- 存档模式横幅（PLAN 第三批 6b 的产品决策：控件**禁用 + 横幅说明**）。
-           ⚠️ 存在的理由：存档按 6a 的定案只含图纸本身（不含原图/选框/简化强度），
+      <!-- 存档模式横幅（产品决策：控件**禁用 + 横幅说明**）。
+           ⚠️ 存在的理由：存档只含图纸本身（不含原图/选框/简化强度），
            而「网格尺寸」与「颜色简化」都必须**重新采样原图**才能生效。
            禁用控件而不说明，用户只会看到一片灰、以为坏了 ——
            本仓库一贯要求"静默改变/静默失效不可接受"（同近似色合并必须播报替代色号）。 -->
@@ -139,7 +139,7 @@
         <div class="control-group custom-size">
           <span class="control-label" id="customSizeLabel">自定义</span>
           <div class="custom-inputs" role="group" aria-labelledby="customSizeLabel">
-            <!-- placeholder 不是可访问名称（输入后即消失），必须补 aria-label（见 REVIEW.md m5） -->
+            <!-- placeholder 不是可访问名称（输入后即消失），必须补 aria-label -->
             <input type="number" id="customW" min="15" max="104" placeholder="宽"
                    aria-label="自定义网格宽度（15 到 104）" class="custom-input">
             <span class="custom-x" aria-hidden="true">×</span>
@@ -155,12 +155,12 @@
                    aria-describedby="simplifyValue" aria-valuetext="关闭">
             <span class="simplify-value" id="simplifyValue">关闭</span>
           </div>
-          <!-- ⚠️ 手工编辑过图纸后，简化滑块**必须禁用**并说明原因（PLAN 第三批 6c）：
+          <!-- ⚠️ 手工编辑过图纸后，简化滑块**必须禁用**并说明原因：
                滑块是"回到 rawGridData 整份重算"，会把用户的逐格修正**静默抹掉** ——
                而滑块本身完全看不出这件事。只置灰不解释 = 用户以为工具坏了。 -->
           <p class="simplify-lock-hint" id="simplifyLockHint" hidden></p>
         </div>
-        <!-- 行列标尺：52×52 以上靠肉眼数格子必错（PLAN §2.2 P0）。
+        <!-- 行列标尺：52×52 以上靠肉眼数格子必错。
              用 <label for> 关联，可访问名称即「行列标尺」——复选框自身表达开关状态，
              不需要再造 aria-valuetext（与简化滑块不同，它没有"读数"）。 -->
         <div class="control-group ruler-group">
@@ -169,7 +169,7 @@
             <span class="control-label">行列标尺</span>
           </label>
         </div>
-        <!-- A4 打印（PLAN §4.2~4.5）：与 PNG 导出**并存**，不互相替代。
+        <!-- A4 打印：与 PNG 导出**并存**，不互相替代。
              打印走独立 DOM 布局 + window.print()，不经位图 ——
              因为 PNG 里没有物理尺寸（toBlob 固定 96dpi），而 CSS 的 mm 是真实单位。 -->
         <div class="control-group print-group">
@@ -181,7 +181,7 @@
         <div class="control-group">
           <button id="downloadBtn" class="btn btn-primary" disabled
                   aria-describedby="downloadHint">📥 下载 PNG</button>
-          <!-- 禁用原因必须可被读屏取到：disabled 按钮不可聚焦，读屏拿不到原因（见 REVIEW.md M5） -->
+          <!-- 禁用原因必须可被读屏取到：disabled 按钮不可聚焦，读屏拿不到原因 -->
           <span class="visually-hidden" id="downloadHint">请先上传图片并框选区域，生成图纸后即可下载</span>
           <button id="printBtn" class="btn btn-print" disabled
                   aria-describedby="printHint">🖨 打印 A4</button>
@@ -200,7 +200,7 @@
     <!-- ====== 图纸预览 ====== -->
     <section class="preview-section" id="previewSection" hidden>
       <h2 class="section-title">图纸预览</h2>
-      <!-- ====== 单元格编辑工具栏（PLAN 第三批 6c / 6d） ======
+      <!-- ====== 单元格编辑工具栏 ======
            ⚠️ 放在**预览区内部**（不是控制栏）：编辑的对象就是下面这块 canvas，
            工具栏与它同处一屏，用户不必在两块区域之间来回找。
            ⚠️ 「画笔 / 擦除 / 吸管」三个按钮是**显式进入**编辑模式的唯一入口：
@@ -243,8 +243,8 @@
            不让用户靠试错去发现（本仓库一贯要求：静默失效不可接受）。 -->
       <p class="edit-hint" id="editHint"></p>
       <div class="preview-container">
-        <!-- 预览是工具的唯一产出物，必须让读屏用户也能感知（见 REVIEW.md M4） -->
-        <!-- ⚠️ `tabindex="-1"` 是给 **U7** 用的（UAT-1「编辑松手后页面滚回统计表」）：
+        <!-- 预览是工具的唯一产出物，必须让读屏用户也能感知 -->
+        <!-- ⚠️ `tabindex="-1"` 是为了修复「编辑松手后页面滚回统计表」这个缺陷：
              `-1` 表示**不进入 Tab 序列**（不打扰键盘用户的正常导航顺序），
              但**可以**被脚本 / 鼠标聚焦。没有它时 `canvas.tabIndex === -1` 且
              canvas 本身是"不可聚焦元素"，`pointerdown` 里即使调 `focus()` 也不生效，
@@ -258,7 +258,7 @@
                 aria-label="拼豆图纸预览"></canvas>
       </div>
       <p class="preview-info" id="previewInfo"></p>
-      <!-- 打印版面预览说明：PLAN §五 第二批第 5 项要求"屏幕上先给用户页数与每格尺寸预览"。
+      <!-- 打印版面预览说明：屏幕上先给用户"页数与每格尺寸"预览。
            打印是**不可逆的物理动作**（费纸费墨），用户必须在点之前就知道会出几页、格子多大。 -->
       <p class="preview-info print-info" id="printInfo"></p>
     </section>
@@ -283,14 +283,14 @@
     </section>
 
     <!-- ====== 加载提示 ====== -->
-    <!-- aria-live：让读屏用户听到"正在生成/已生成"，而不是静默等待（见 REVIEW.md M5） -->
+    <!-- aria-live：让读屏用户听到"正在生成/已生成"，而不是静默等待 -->
     <div class="loading-overlay" id="loadingOverlay" hidden>
       <div class="loading-spinner"></div>
       <p class="loading-text" id="loadingText" role="status" aria-live="polite">正在生成图纸…</p>
     </div>
 
     <!-- ====== 结果播报（读屏专用，视觉隐藏） ====== -->
-    <!-- 生成完成、尺寸变化等状态由 JS 写入；不占视觉空间（见 REVIEW.md M5） -->
+    <!-- 生成完成、尺寸变化等状态由 JS 写入；不占视觉空间 -->
     <p class="visually-hidden" id="liveStatus" role="status" aria-live="polite"></p>
 
     <!-- ====== 全局提示条（与当前显示的分区无关，任何阶段都可见） ====== -->
@@ -308,9 +308,9 @@
     <!-- ====== 隐藏画布用于下载合成 ====== -->
     <canvas id="downloadCanvas" hidden></canvas>
 
-    <!-- ====== A4 打印版面（PLAN §4.2：独立 DOM 布局，不经位图） ======
+    <!-- ====== A4 打印版面（独立 DOM 布局，不经位图） ======
          屏幕上**完全隐藏**，只在 @media print 下显示；同时打印时反转 hide 屏幕 UI。
-         色号是真实文本节点 ⇒ 由打印机按自身分辨率渲染，600dpi/300dpi 都清晰（§4.2 优势②）。
+         色号是真实文本节点 ⇒ 由打印机按自身分辨率渲染，600dpi/300dpi 都清晰。
          ⚠️ 结构由 js/output/print.js 逐页填充；这里只给挂载点。 -->
     <div id="printRoot" aria-hidden="true"><div id="printPages"></div></div>
 
@@ -319,11 +319,11 @@
   <!-- ⚠️ **只保留这一个入口**。<script type="module"> 取代了原来的 19 个裸 <script>：
        依赖顺序由各模块自己的 import 语句表达，不再靠标签顺序维护。
        type="module" 的代价：ESM 受 CORS 限制，**双击 index.html 不再可用**，
-       必须经 HTTP 服务打开（用户已确认接受，见 REFACTOR §六 决策点 1）。 -->
+       必须经 HTTP 服务打开（这是已确认接受的代价）。 -->
   <script type="module" src="js/main.js"></script>
   <script>
     // Service Worker 注册。
-    // 失败时**不能在控制台完全静默** —— 否则"离线功能不生效"无从排查（见 REVIEW.md n4）。
+    // 失败时**不能在控制台完全静默** —— 否则"离线功能不生效"无从排查。
     // 用户可见层面仍保持安静（不影响主流程），只在控制台留下可诊断的信息。
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

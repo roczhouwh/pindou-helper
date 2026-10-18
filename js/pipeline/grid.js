@@ -6,7 +6,6 @@ import { renderPreview } from '../output/preview.js';
 import { renderStats } from '../output/stats.js';
 // ⚠️ `refreshPrintInfo` 而不是 `refreshPrintLayout`：屏幕上只缺"文案随档位变"（U6），
 //    `#printRoot` 只在 @media print 显示，无需在生成时重建版面。
-//    依赖方向与 preview.js / stats.js 完全一致（同属 output/ 叶子），不新增跨层边 ——
 //    print.js 不 import grid.js，故无环。
 import { refreshPrintInfo } from '../output/print.js';
 import { clearEditHistory } from './edit.js';
@@ -17,18 +16,18 @@ import { hideLoading, showLoading } from '../ui/loading.js';
 // ============================================================
 // js/pipeline/grid.js — 网格生成（逐格采样 → 色板映射）
 // ============================================================
-// 自 app.js 的「5. 网格生成 + 色板映射」整段搬迁而来（REFACTOR §7.1 步骤 5）。
+
 //
-// ⚠️ **两条契约必须原样保留**（均有测试守护，见 test-patch-removal.js）：
+// ⚠️ **两条契约必须原样保留**（均有测试守护）：
 //   ① `generateGrid()` 是**唯一入口** —— 它驱动加载遮罩 + 把重活推到 rAF + finally 兜底。
 //      真实实现在 `generateGridCore()`；**直接调它会绕过遮罩**，
-//      用户观感就是"点了没反应"（CLAUDE.md 有同类教训）。
+//      用户观感就是"点了没反应"。
 //   ② **时序契约**：`generateGrid()` 返回时 `state.gridData` / `state.colorCounts`
 //      **仍是上一轮**的数据（真实生成被推迟到下一帧）。需要新数据请在下一帧之后再读。
 //
 // ⚠️ 两者**必须同文件** —— 入口与实现是同一职责，拆开会让 ① 的"唯一入口"失效。
 //
-// 本文件是原生 ES module（步骤 0 已完成）：依赖由上方 import 显式声明，
+// 本文件是原生 ES module：依赖由上方 import 显式声明，
 // 不再靠"共享全局词法环境"。
 // 它调用的 showLoading / hideLoading / showToast / announce / renderPreview /
 // renderStats / applySimplify 等来自其它模块，由上方 import 显式引入。
@@ -39,7 +38,7 @@ import { hideLoading, showLoading } from '../ui/loading.js';
 /**
  * 生成图纸的**唯一入口**（编排：加载遮罩 + 帧调度 + 错误兜底）。
  *
- * ⚠️ **时序契约（REFACTOR.md §7.4 步 1 要求显式化）**：
+ * ⚠️ **时序契约**：
  * 真实生成被推迟到 `requestAnimationFrame`，因此**本函数返回时
  * `state.gridData` / `state.colorCounts` 仍是上一轮的数据**。
  * 调用后立刻读这两个字段会读到旧值；需要新数据请在下一帧之后再读。
@@ -49,7 +48,7 @@ import { hideLoading, showLoading } from '../ui/loading.js';
  * 加载遮罩会**永久卡死界面**（这正是下方 catch 存在的理由）。
  *
  * > 本函数此前是「函数声明 + 文件末尾猴补丁整体覆盖」的形态，
- * > 已按 REFACTOR.md §2.1 拆除。**不要再对函数做猴补丁** —— 它是模块化的硬阻塞。
+ * > 猴补丁已拆除。**不要再对函数做猴补丁** —— 它是模块化的硬阻塞。
  */
 export function generateGrid() {
   const startTime = Date.now();
@@ -74,7 +73,7 @@ export function generateGrid() {
  * 真实的网格生成实现（逐格采样 → 色板映射 → 颜色简化 → 预览 + 统计）。
  *
  * **请勿直接调用** —— 走 `generateGrid()` 入口，否则加载遮罩不会被驱动，
- * 用户观感就是"点了没反应"（见 CLAUDE.md「按阶段选对函数」的同类教训）。
+ * 用户观感就是"点了没反应"。
  */
 export function generateGridCore() {
   if (!state.image) return;
@@ -88,8 +87,8 @@ export function generateGridCore() {
   // 大图先降采样到最长边 2048 再采样。
   // ⚠️ 精度说明（更正原注释）：降采样**会**影响颜色 —— drawImage 会做平滑平均，
   // 对细纹理/高频细节是真实的低通损失，只是对"每格平均色"这一用途影响很小。
-  // 原注释称"颜色精度不受影响"夸大其保证（见 REVIEW.md m11）。
-  // 用 imageSmoothingQuality='high' 减轻该损失（见 REVIEW.md n9）。
+  // 原注释称"颜色精度不受影响"夸大其保证。
+  // 用 imageSmoothingQuality='high' 减轻该损失。
   const MAX_OFFSCREEN = 2048;
   let sampleW = state.imageW;
   let sampleH = state.imageH;
@@ -102,7 +101,7 @@ export function generateGridCore() {
   const offCtx = offscreenCanvas.getContext('2d');
   offscreenCanvas.width = sampleW;
   offscreenCanvas.height = sampleH;
-  // 降采样质量默认是 'low'，会加重细纹理的插值损失（见 REVIEW.md n9）。
+  // 降采样质量默认是 'low'，会加重细纹理的插值损失。
   // 必须在赋值 width/height **之后**设置：给 canvas 尺寸赋值会重置绘图状态。
   offCtx.imageSmoothingEnabled = true;
   offCtx.imageSmoothingQuality = 'high';
@@ -110,7 +109,7 @@ export function generateGridCore() {
 
   // 选框像素坐标
   // 夹取到图片范围内：选框由 UI 拖拽产生，x+w 可能 > 1（拖到右/下缘外），
-  // 不夹取会让后面的裁剪宽高算出负数（见 REVIEW.md M10）
+  // 不夹取会让后面的裁剪宽高算出负数
   const selX = clamp(Math.floor(x * sampleW), 0, sampleW - 1);
   const selY = clamp(Math.floor(y * sampleH), 0, sampleH - 1);
   const selW = Math.max(1, Math.min(Math.floor(w * sampleW), sampleW - selX));
@@ -125,7 +124,7 @@ export function generateGridCore() {
   let contentW, contentH, offsetCol, offsetRow;
   if (selAspect >= gridAspect) {
     // 内容填满宽度，上下留空
-    // 取整分工（见 REVIEW.md m14）：格数取最接近值（round），留白取整数格（floor）
+    // 取整分工：格数取最接近值（round），留白取整数格（floor）
     contentW = gw;
     contentH = Math.max(1, Math.min(gh, Math.round(gw / selAspect)));
     offsetCol = 0;
@@ -138,7 +137,7 @@ export function generateGridCore() {
     offsetRow = 0;
   }
 
-  // ---- 极端宽高比的量化偏差提示（见 REVIEW.md M9）----
+  // ---- 极端宽高比的量化偏差提示----
   // 内容只占很少格数时，Math.round 的 ±0.5 格就是很大的相对偏差
   // （实测 29×29 配 20:1 选框 → 内容 29×1，偏差 +45%）。
   // 这不是逻辑错误而是**量化极限**（偏差 ≈ 0.5 ÷ content 短边格数），
@@ -172,7 +171,7 @@ export function generateGridCore() {
 
       // 每格采样区 = 该格在选框内占据的完整矩形，相邻格首尾相接。
       // 旧实现用「中心点 ± 半格窗口」，窗口边长只有 cellSamp*0.5，
-      // 导致相邻窗口之间空出半格宽的缝（见 REVIEW.md M11）：
+      // 导致相邻窗口之间空出半格宽的缝：
       // 实测 512→29 时整行 54.7% 的像素从未被采样，且缝隙随列号周期漂移，
       // 等效固定相位梳状降采样，细纹理图会产生规律性串色。
       // 改为按格边界取整，并保证 [x0, x1) 至少 1px、不超出画布。
@@ -219,14 +218,14 @@ export function generateGridCore() {
 
   // 保存原始映射数据（颜色简化用）
   // 深拷贝两层：行数组与**格子对象**都要独立。
-  // 必要性（见 REVIEW.md n7 / PLAN §3.4）：
+  // 必要性：
   //  ① `findNearestColor` 返回的是 PERLER_PALETTE 里的**对象引用**，
   //     若直接存进 gridData，将来做单元格编辑就会就地改坏**全局色板**；
   //  ② gridData 与 rawGridData 若共享行数组，"滑块回 0 恢复原始数据"
   //     会恢复出被编辑过的内容且不可逆。
   state.rawGridData = cloneGrid(grid);
   // 与 rebuildColorCounts 一致地按数量降序：否则 simplify=0 与 simplify>0
-  // 两条路径给出的统计表顺序不同，拖动滑块会看到表格重排（见 REVIEW.md M1）
+  // 两条路径给出的统计表顺序不同，拖动滑块会看到表格重排
   state.rawColorCounts = Array.from(colorMap.values())
     .map(c => ({ ...c }))
     .sort((a, b) => b.count - a.count);
@@ -235,10 +234,10 @@ export function generateGridCore() {
   // ⚠️ **无论滑块是否为 0 都必须走 `applySimplify()`** —— 它内含
   // 「常开近似色合并」层（针对色板自身的近同色对，见该函数 JSDoc）。
   // 此前 `simplify <= 0` 时走的是"直接复制 raw"的旁路，导致默认状态下
-  // 近同色对原样存在、凭空多出色号（PLAN §3.1 的缺陷）。
+  // 近同色对原样存在、凭空多出色号。
   applySimplify();
 
-  // ⚠️ **撤销栈必须在这里清掉**（PLAN 第三批 6c/6d）：这一轮的 gridData 是
+  // ⚠️ **撤销栈必须在这里清掉**：这一轮的 gridData 是
   //    **重新采样**的结果，上一轮的编辑点已无对应关系。不清栈就会出现
   //    "撤销一下，格子被改回上一张图的值"这种最难看懂的数据错乱。
   //    用 `clearEditHistory()` 而**不是** `resetEditState()`：后者连工具与
@@ -254,7 +253,7 @@ export function generateGridCore() {
   renderPreview();
   renderStats();
   downloadBtn.disabled = false;
-  // 打印出口与 PNG 导出**并存**（PLAN §4.2）：两者都以"图纸已生成"为前提，
+  // 打印出口与 PNG 导出**并存**：两者都以"图纸已生成"为前提，
   // 故启用时机与 downloadBtn 完全一致。⚠️ 漏了这一行 ⇒ 按钮永远灰色，
   // 用户观感就是"打印功能没做"（与 export.js 漏装配等价的表现）。
   printBtn.disabled = false;
@@ -264,9 +263,9 @@ export function generateGridCore() {
   //    （他实测报告的就是这个反直觉现象）。落点放这里而不是 UI 层：
   //    与 preview / stats 同属"图纸变了要跟着变"的收尾，只有一份实现。
   refreshPrintInfo();
-  // 保存图纸（PLAN 第三批 6b）同理：它的前提同样是"已有一张图纸"
+  // 保存图纸同理：它的前提同样是"已有一张图纸"
   saveArchiveBtn.disabled = false;
-  // 播报生成结果：读屏用户此前对"图纸已生成"完全无感（见 REVIEW.md M5）
+  // 播报生成结果：读屏用户此前对"图纸已生成"完全无感
   announce(`图纸已生成：${gw}×${gh} 网格，${state.colorCounts ? state.colorCounts.length : 0} 种颜色`);
 }
 
@@ -304,14 +303,14 @@ export function adoptGrid(grid) {
 
   // ⚠️ 再拷一份：调用方（storage.js）已经产出副本，但本函数是**公开入口**，
   //    将来别的来源（如用户手改的 JSON）未必拷贝 —— 就地编辑一上线，
-  //    不拷贝就会把来源对象与全局色板一起改坏（PLAN §3.4 / REVIEW.md n7）。
+  //    不拷贝就会把来源对象与全局色板一起改坏。
   state.gridData = cloneGrid(grid);
   state.gridW = cols;
   state.gridH = rows;
   // 见上方说明：rawGridData 是"采样原始值"的语义，载入路径**没有**它
   state.rawGridData = null;
   state.rawColorCounts = null;
-  // ⚠️ 撤销栈也要清掉（PLAN 第三批 6c/6d）：载入的是一份**别的图纸**，
+  // ⚠️ 撤销栈也要清掉：载入的是一份**别的图纸**，
   //    上一张图的编辑点在这里没有任何对应关系（尺寸都可能不同）。
   //    不清栈的后果与"重新生成"那条一样，但更隐蔽 —— 用户会以为
   //    "撤销"是在撤销刚载入的这张图上的操作。
