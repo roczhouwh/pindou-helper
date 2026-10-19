@@ -1,4 +1,5 @@
-// ⚠️ **必须写成单行具名 import**：`lint-noundef.js` 的解析器只认这一种形态。
+// ⚠️ **import 一律写成单行具名形式**：便于静态检查工具解析依赖。
+import { PERLER_PALETTE } from '../../color-palette.js';
 import { brushBtn, editColorName, editColorSwatch, editHint, eraseBtn, exitEditBtn, pickBtn, previewCanvas, redoBtn, statsBody, undoBtn } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { showToast } from '../input/upload.js';
@@ -66,6 +67,58 @@ const TOOL_LABEL = {
   [EDIT_TOOL.ERASE]: '擦除',
   [EDIT_TOOL.PICK]: '吸管',
 };
+
+/**
+ * 「还没选颜色，去哪儿选」的**唯一**文案源。
+ *
+ * ⚠️ 选色入口有**三个**：🎨 全部色板 / 统计表 / 吸管。这组提示原先在
+ *    三处各写一遍（提示条 / 涂色 toast / 切画笔播报），加第三个入口时必然漏掉其中一处。
+ *    故收成一个模块级常量，三处**都引用它**，下次再加入口只改这一个字符串。
+ */
+const PICK_COLOR_HINT =
+  '点「🎨 全部色板」挑一个色号，或在「颜色统计」里点「选为画笔色」，也可用「吸管」从图上取色';
+
+/**
+ * 统一的"选一个画笔色"——**三条选色入口共用**（色板 / 统计表 / 吸管）。
+ *
+ * 语义（与统计表原有语义**逐字一致**）：
+ *   1. `setEditColor()`（模型层内部逐字段拷贝，绝不存引用）；
+ *   2. **仅当**当前是 `none` 才切到画笔 —— 用户在**擦除态**挑个色备用，
+ *      被强行切成画笔就会"擦着擦着变成涂色"，这是最难解释的行为漂移；
+ *   3. `updateEditUI()`（模型层观察者也会通知，这里是同一次同步）；
+ *   4. `announce()` + `showToast()`。
+ *
+ * ⚠️ 为什么放在本模块而不是各入口自己实现：
+ *    色板（`palette-picker.js`）若照抄一遍这四步，就出现了**第二份真源**，
+ *    将来改语义（比如"选色后记住工具"）必然只改一处。
+ *
+ * @param {string} name 色号名（如 `A10`）
+ * @returns {boolean} 是否成功（找不到该色号时给出提示并返回 false）
+ */
+export function chooseEditColor(name) {
+  const entry = (state.colorCounts || []).find((c) => c.name === name);
+  let pal = entry;
+  if (!pal) {
+    // 统计表路径：色号必须来自当前图纸。但**色板路径不受此限** ——
+    // 色板是"任意 221 色"，用户挑的色号图上还没有是完全正常的。
+    // 故这里回查色板；两处都查不到才是真的无效。
+    pal = PERLER_PALETTE.find((p) => p.name === name);
+    if (!pal) {
+      // 正常路径不可达（色板与统计表的色号都来自可靠来源）——
+      // 如实报告，不静默
+      showToast('这个色号已不在当前图纸里，请重新选择');
+      return false;
+    }
+  }
+  setEditColor(pal);
+  // 选了色就意味着要改：直接从"未进入编辑"进到画笔，省掉一次点击。
+  // ⚠️ **只在 none 时切** —— 不要在擦除/吸管态强行切换（见上方语义 2）
+  if (state.editTool === EDIT_TOOL.NONE) setEditTool(EDIT_TOOL.BRUSH);
+  updateEditUI();
+  announce(`已选择画笔颜色 ${name}`);
+  showToast(`画笔颜色：${name}`);
+  return true;
+}
 
 /** 编辑是否处于"可动手"状态（有图纸且选了工具） */
 function editActive() {
@@ -136,7 +189,7 @@ function editHintText() {
     return '吸管：点预览图上的格子，取它的色号作为画笔颜色（空格子取不到色）。';
   }
   if (!state.editColor) {
-    return '还没有选颜色：在上方「颜色统计」表里点某一行的「🖌 选为画笔色」，或用「吸管」从图上取色。';
+    return `还没有选颜色：${PICK_COLOR_HINT}。`;
   }
   if (tool === EDIT_TOOL.ERASE) {
     return `擦除：点或拖过预览图上的格子，把它清成空格（当前画笔色 ${state.editColor.name} 不受影响）。`;
@@ -238,7 +291,7 @@ function applyToolAt(cell) {
     // 画笔没选色：一笔之内只提示一次，不刷屏（拖拽期间会连续触发）
     if (!warnedNoColor) {
       warnedNoColor = true;
-      showToast('请先选颜色：在「颜色统计」里点「🖌 选为画笔色」，或用吸管从图上取色');
+      showToast(`请先选颜色：${PICK_COLOR_HINT}`);
     }
     return false;
   }
@@ -379,7 +432,7 @@ function toggleTool(tool) {
   setEditTool(tool);
   updateEditUI();
   if (tool === EDIT_TOOL.BRUSH && !state.editColor) {
-    announce('画笔：请先在颜色统计表里选一个颜色');
+    announce('画笔：请先选一个颜色（全部色板 / 统计表 / 吸管）');
   } else {
     announce(`已切换到${TOOL_LABEL[tool]}`);
   }
@@ -403,19 +456,8 @@ exitEditBtn.addEventListener('click', () => {
 statsBody.addEventListener('click', (e) => {
   const btn = e.target.closest ? e.target.closest('.stats-pick-btn') : null;
   if (!btn) return;
-  const name = btn.dataset.name;
-  const entry = (state.colorCounts || []).find((c) => c.name === name);
-  if (!entry) {
-    // 统计表与网格不同步才会走到这里（正常路径不可达）—— 如实报告，不静默
-    showToast('这个色号已不在当前图纸里，请重新选择');
-    return;
-  }
-  setEditColor(entry);
-  // 选了色就意味着要改：直接从"未进入编辑"进到画笔，省掉一次点击
-  if (state.editTool === EDIT_TOOL.NONE) setEditTool(EDIT_TOOL.BRUSH);
-  updateEditUI();
-  announce(`已选择画笔颜色 ${name}`);
-  showToast(`画笔颜色：${name}`);
+  // 与色板 / 吸管走**同一个**选色函数（三条入口逐字一致）
+  chooseEditColor(btn.dataset.name);
 });
 
 // ------------------------------------------------------------

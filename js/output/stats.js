@@ -30,11 +30,14 @@ export function renderStats() {
     //    而"整行可点"在触屏上还会与滚动抢手势。
     // ⚠️ `data-name` 只带**色号名**，颜色对象由编辑层按名字回查 ——
     //    把 hex/rgb 也塞进 DOM 属性会让"哪个是真源"变成两处维护。
+    // ⚠️ **不输出 hex 文本**：普通拼豆玩家只认色号，
+    //    界面上出现 `#FAF4C8` 只会增加噪音 —— 而且它曾是"名称列显色号、
+    //    色号列显 hex"这两列口径颠倒的来源。
+    //    色块的 `background` 是内联样式，不是文本，不违反"界面不出现 hex"。
     html += `
       <tr>
         <td><span class="color-swatch" style="background:${c.hex};"></span></td>
         <td><span class="color-name">${c.name}</span></td>
-        <td><span class="color-hex">${c.hex}</span></td>
         <td><span class="color-count">${c.count}</span></td>
         <td><button type="button" class="stats-pick-btn" data-name="${c.name}"
                     aria-label="用 ${c.name} 作为画笔颜色">🖌 选为画笔色</button></td>
@@ -43,9 +46,11 @@ export function renderStats() {
   }
 
   statsBody.innerHTML = html;
+  // ⚠️ `colspan` 必须跟着列数走：4 列时"颜色/色号/数量"是 3 列 ⇒ colspan=3。
+  //    写成 4 会把「总计」顶到操作列、把颗数挤到下一列（表头与数据错位）。
   statsFoot.innerHTML = `
     <tr>
-      <td colspan="4">总计</td>
+      <td colspan="3">总计</td>
       <td><span class="color-count">${total} 颗</span></td>
     </tr>`;
 }

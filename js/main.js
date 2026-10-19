@@ -100,6 +100,11 @@ import './ui/library.js';
 //    没有任何别的模块 import 它，**漏了这一条它永远不会被浏览器请求**，
 //    页面表现为"编辑工具完全不存在"。
 import './ui/edit-ui.js';
+// 全色板选择器（js/ui/palette-picker.js）：
+// ⚠️ 与 library.js 同类 —— 它是 **UI 叶子**（按钮、筛选、键盘、焦点陷阱都在它自己顶层），
+//    没有任何别的模块 import 它，**漏了这一条它永远不会被浏览器请求**，
+//    页面表现为"「🎨 全部色板」点了没反应"。
+import './ui/palette-picker.js';
 import './ui/loading.js';
 import './ui/install.js';
 

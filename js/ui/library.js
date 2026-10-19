@@ -1,6 +1,5 @@
-// ⚠️ **必须写成单行具名 import**：`lint-noundef.js` 的解析器只认这一种形态
-//    （它刻意对其它形态返回 null 并报错，以防"静默漏检"）。
-//    写成多行会让静态检查直接 SyntaxError —— 实测踩到。
+// ⚠️ **import 一律写成单行具名形式**：便于静态检查工具解析依赖，
+//    写成多行会让它解析失败。
 import { archiveBanner, archiveHint, archiveName, archiveSelect, controlsSection, deleteArchiveBtn, loadArchiveBtn, saveArchiveBtn, selectionBox, uploadSection, viewerSection } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { MAX_ARCHIVES, deleteArchive, readArchive, readLibrary, saveArchive } from '../core/storage.js';

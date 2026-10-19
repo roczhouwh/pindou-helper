@@ -55,7 +55,13 @@
 //      simplify.js 的滑块层改为"只在图内已有色里选目标"，常开层保持静态色板级
 // v28：在线部署（Vercel + Cloudflare）—— 首版线上站点，内容与 v27 一致；
 //      递增只是为了给线上首版一个干净的缓存基线（避免与本地缓存版本混淆）
-const CACHE_NAME = 'pindou-v28';
+// v29：全色板选择器（「🎨 全部色板」）——
+//      新增 js/ui/palette-picker.js；统计表 5 列改 4 列（不再显示十六进制）；
+//      #previewInfo 的近似色合并告知改为"只报图上确实不存在的源色号"
+// v30：修复全色板的方向键语义 ——
+//      ↓/↑ 改为"换到上/下一行的同一列"（按真实几何找，不按每行格数推算），
+//      ←/→ 保持线性步进。⚠️ 从 v29 升上来是为了让已缓存 v29 的设备确实取到修正版。
+const CACHE_NAME = 'pindou-v30';
 
 // 拼豆自己的资源列表（相对 SW 脚本作用域解析）
 // ⚠️ 每新增一个 js/ 模块都必须加进来 —— 漏了会导致**离线时该模块 404 → 白屏**，
@@ -89,6 +95,7 @@ const ASSET_PATHS = [
   './js/ui/grid-select.js',
   './js/ui/library.js',
   './js/ui/edit-ui.js',
+  './js/ui/palette-picker.js',
   './js/ui/loading.js',
   './js/ui/install.js',
   './js/main.js',

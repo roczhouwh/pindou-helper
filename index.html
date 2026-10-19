@@ -223,6 +223,13 @@
           <button class="edit-tool-btn" id="pickBtn" role="radio" aria-checked="false"
                   aria-describedby="editHint">💧 吸管</button>
         </span>
+        <!-- 全色板选择器：选色入口的第三个（前两个：统计表、吸管）。
+             ⚠️ 它**在 radiogroup 外面**：那组单选按钮表达的是"当前用哪个工具"，
+             本按钮是"去挑一个颜色"的动作，混进去会破坏 `role=radiogroup` 的单选语义。
+             ⚠️ aria-haspopup/aria-expanded 表明它会开一个对话框，
+             关闭时必须把 aria-expanded 置回 false，否则读屏用户会以为它还开着。 -->
+        <button class="edit-tool-btn" id="paletteBtn" aria-haspopup="dialog"
+                aria-expanded="false" aria-describedby="editHint">🎨 全部色板</button>
         <button class="edit-tool-btn edit-exit-btn" id="exitEditBtn" hidden>✕ 退出编辑</button>
         <!-- 当前画笔颜色：色号名是**文本**，色块只是辅助 ——
              只给一个色块的话，色盲用户拿不到"我正要涂哪个色号"这条关键信息 -->
@@ -271,9 +278,9 @@
           <thead>
             <tr>
               <th>颜色</th>
-              <th>名称</th>
               <th>色号</th>
               <th>数量</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody id="statsBody"></tbody>
@@ -307,6 +314,31 @@
     <canvas id="offscreenCanvas" hidden></canvas>
     <!-- ====== 隐藏画布用于下载合成 ====== -->
     <canvas id="downloadCanvas" hidden></canvas>
+
+    <!-- ====== 色板选择器 ======
+         自建的模态层（不用 <dialog>）：行为完全由本项目的 JS 决定，便于自动化驱动。
+         ⚠️ `hidden` 能用：style.css 里有 `[hidden]{display:none!important}`，
+         它压得住本元素的 display:flex。
+         ⚠️ 色块由 JS 在**首次打开时**一次性构建，之后筛选只切 hidden，不重建节点。 -->
+    <div class="palette-overlay" id="paletteOverlay" hidden>
+      <div class="palette-panel" id="palettePanel" role="dialog" aria-modal="true"
+           aria-labelledby="paletteTitle" aria-describedby="paletteDesc">
+        <header class="palette-head">
+          <div>
+            <h2 class="palette-title" id="paletteTitle">选择颜色</h2>
+            <p class="palette-desc" id="paletteDesc">MARD 221 色 · 点色号即选中</p>
+          </div>
+          <button class="palette-close" id="paletteCloseBtn" aria-label="关闭色板">✕</button>
+        </header>
+        <div class="palette-filter">
+          <input type="search" id="paletteFilter" class="palette-filter-input"
+                 autocomplete="off" placeholder="输入色号筛选，如 A10"
+                 aria-label="按色号筛选">
+          <span class="palette-count" id="paletteCount" role="status" aria-live="polite"></span>
+        </div>
+        <div class="palette-body" id="paletteBody" role="listbox" aria-label="全部色板"></div>
+      </div>
+    </div>
 
     <!-- ====== A4 打印版面（独立 DOM 布局，不经位图） ======
          屏幕上**完全隐藏**，只在 @media print 下显示；同时打印时反转 hide 屏幕 UI。

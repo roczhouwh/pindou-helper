@@ -286,9 +286,20 @@ export function renderPreview() {
   // 近似色合并是**静默改变用户产出**的行为：用户会发现自己按图买的色号
   // （如 H12）在图纸上根本不存在。必须如实告知**并给出替代色号** ——
   // 只说"H12 没了"而不说"改用 E16"等于没说。
+  //
+  // ⚠️ `mergedColors` 是"**生成时**发生过哪些合并"的记录，而 `paintCell()` 不会更新它
+  //    （`edit.js` 的 syncColorCounts 只重算 colorCounts）。全色板允许用户直接选
+  //    `H12` 涂上去 ⇒ 图纸上明明有 H12，这里却还写着「H12→E16」，**界面在说谎**。
+  //    故只报"当前图纸上确实不存在"的源色号。
+  //    生成路径上这是 no-op：被并掉的色号必然已不在 colorCounts 里。
+  //    ⚠️ 复杂度 O(≤221)，**不扫网格** —— 不要在 renderPreview 里遍历 gridData。
   if (state.mergedColors && state.mergedColors.length) {
-    const list = state.mergedColors.map((m) => `${m.from}→${m.to}`).join('、');
-    previewInfo.textContent += ` · 已合并近似色：${list}`;
+    const present = new Set((state.colorCounts || []).map((c) => c.name));
+    const list = state.mergedColors
+      .filter((m) => !present.has(m.from))
+      .map((m) => `${m.from}→${m.to}`)
+      .join('、');
+    if (list) previewInfo.textContent += ` · 已合并近似色：${list}`;
   }
   // 极端比例提示：与预览信息同处，用户一眼能看到
   previewInfo.classList.toggle('preview-warning', !!state.aspectWarning);

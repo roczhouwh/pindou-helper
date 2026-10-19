@@ -62,6 +62,14 @@ export const undoBtn = $('#undoBtn');
 export const redoBtn = $('#redoBtn');
 /** 简化滑块被编辑锁住时的**就近说明**（编辑后禁用滑块必须说明原因） */
 export const simplifyLockHint = $('#simplifyLockHint');
+// ---- 全色板选择器（js/ui/palette-picker.js）----
+export const paletteBtn = $('#paletteBtn');
+export const paletteOverlay = $('#paletteOverlay');
+export const palettePanel = $('#palettePanel');
+export const paletteCloseBtn = $('#paletteCloseBtn');
+export const paletteFilter = $('#paletteFilter');
+export const paletteCount = $('#paletteCount');
+export const paletteBody = $('#paletteBody');
 // ---- 图纸存档（js/ui/library.js）----
 export const archiveSection = $('#archiveSection');
 export const archiveName = $('#archiveName');

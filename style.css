@@ -667,6 +667,166 @@ body {
   font-weight: 500;
 }
 
+/* ============================================================
+   色板选择器（js/ui/palette-picker.js）
+   ============================================================ */
+/* ⚠️ z-index **1050**：高于 .loading-overlay(1000)、**低于 .toast(1100)** ——
+   选色后的提示必须浮在面板之上，否则用户看不到「画笔颜色：A10」这条确认。 */
+.palette-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  /* 防 iOS 上的橡皮筋滚动穿透 */
+  touch-action: none;
+}
+
+/* 滚动锁：打开时禁止背景滚动 */
+.palette-open { overflow: hidden; }
+
+.palette-panel {
+  width: min(720px, 92vw);
+  max-height: min(85vh, 720px);
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.palette-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.palette-title { font-size: 17px; margin: 0 0 2px; }
+.palette-desc { font-size: 12px; color: var(--text-muted); margin: 0; }
+
+.palette-close {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+}
+.palette-close:hover { background: var(--primary-light); color: var(--primary); }
+
+.palette-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+}
+
+.palette-filter-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: inherit;
+}
+.palette-filter-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.palette-count {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.palette-body {
+  flex: 1;
+  overflow-y: auto;
+  /* 面板内滚到底时不把滚动传给背景（配合 overlay 的 touch-action: none） */
+  overscroll-behavior: contain;
+  padding: 0 18px 16px;
+}
+
+.palette-group-title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 8px 0 6px;
+}
+
+.palette-cells {
+  display: grid;
+  /* 375px 宽一行 6 个 */
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 6px;
+}
+
+.palette-cell {
+  /* WCAG 2.5.5 触摸目标 */
+  min-height: 44px;
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* 色号文字颜色由 JS 写入的 data-fg 决定（复用 render.js 的 pickTextColor） */
+.palette-cell[data-fg="light"] { color: #FFFFFF; }
+.palette-cell[data-fg="dark"] { color: #000000; }
+.palette-cell-name { font-size: 11px; font-weight: 600; }
+
+.palette-cell:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* 选中态（当前画笔色）：与焦点态可区分 —— 一个是"选了"，一个是"键盘在这" */
+.palette-cell[aria-selected="true"] {
+  box-shadow: 0 0 0 3px var(--primary);
+  border-color: var(--primary);
+}
+
+.palette-empty {
+  padding: 24px 4px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* 移动端：近全屏（221 项必须靠滚动 + 筛选；375px 宽一行 6 个） */
+@media (max-width: 640px) {
+  .palette-overlay { align-items: stretch; justify-content: stretch; }
+  .palette-panel {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+  }
+  .palette-head { padding: 14px 14px 8px; }
+  .palette-filter { padding: 8px 14px; }
+  .palette-body { padding: 0 14px 14px; }
+}
+
 /* --- 全局提示条 --- */
 /* 必须独立于各 section 的显隐：导出/生成失败时 upload-section 已隐藏，
    写进 #uploadError 的提示用户看不见 */
@@ -939,11 +1099,9 @@ body {
   font-weight: 500;
 }
 
-.color-hex {
-  font-family: 'SF Mono', 'Cascadia Code', monospace;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
+/* ⚠️ .color-hex 已删除：统计表不再显示十六进制。
+   不要再加回来 —— 界面上只出现色号，色块的 background 是样式不是文本。 */
+
 
 .color-count {
   font-weight: 600;
@@ -1096,7 +1254,8 @@ body {
   .stats-section,
   .loading-overlay,
   .toast,
-  .install-banner { display: none !important; }
+  .install-banner,
+  .palette-overlay { display: none !important; }
 
   .main { padding: 0 !important; gap: 0 !important; display: block !important; }
   body { background: #fff !important; }
