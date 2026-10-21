@@ -70,6 +70,9 @@ export const paletteCloseBtn = $('#paletteCloseBtn');
 export const paletteFilter = $('#paletteFilter');
 export const paletteCount = $('#paletteCount');
 export const paletteBody = $('#paletteBody');
+/** 面板标题与副标题 —— 批量换色模式要按用途改写文案 */
+export const paletteTitle = $('#paletteTitle');
+export const paletteDesc = $('#paletteDesc');
 // ---- 图纸存档（js/ui/library.js）----
 export const archiveSection = $('#archiveSection');
 export const archiveName = $('#archiveName');

@@ -1,11 +1,11 @@
 // ⚠️ **import 一律写成单行具名形式**：便于静态检查工具解析依赖。
 import { PERLER_PALETTE } from '../../color-palette.js';
-import { paletteBtn, paletteBody, paletteCloseBtn, paletteCount, paletteFilter, paletteOverlay, palettePanel } from '../core/dom.js';
+import { paletteBtn, paletteBody, paletteCloseBtn, paletteCount, paletteDesc, paletteFilter, paletteOverlay, palettePanel, paletteTitle } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { showToast } from '../input/upload.js';
 import { pickTextColor } from '../pipeline/render.js';
 import { announce } from './a11y.js';
-import { chooseEditColor } from './edit-ui.js';
+import { chooseEditColor, applyReplacement } from './edit-ui.js';
 
 // ============================================================
 // js/ui/palette-picker.js — 全色板选择器（方案 A）
@@ -70,6 +70,30 @@ let built = false;
 let rovingEl = null;
 /** 遮罩打开前的焦点，用于关闭时还原（正常情况下就是 `#paletteBtn`） */
 let lastActive = null;
+
+/**
+ * 当前面板的**用途**（N2）：`null` = 画笔模式（N1 原语义）；
+ * `{ kind:'replace', sourceName, cellCount }` = 批量换色模式。
+ *
+ * ⚠️ **刻意不放进 `state`**（N2 定案）：它只服务一次交互，换台设备打开毫无意义；
+ *    放进 `state` 就要在 `resetEditState()` / `handleFile()` / `adoptGrid()` 三处
+ *    各归零一次，漏一处就是一个新的"状态残留"缺陷。
+ *    与 `rovingEl` / `lastActive` 同例。
+ *
+ * ⚠️ **`closePalette()` 必须清空它** —— 不清的表现是"下次点「🎨 全部色板」，
+ *    面板却还在做换色"，用户会以为色板坏了（N2 的专项测试守着）。
+ */
+let mode = null;
+
+/**
+ * 关闭时**该把焦点还给谁**（打开时记录：`#paletteBtn` 或统计表那一行的换色按钮）。
+ * 见 `closePalette()` 的焦点策略说明。`null` ⇒ 退回 `#paletteBtn`。
+ */
+let focusReturnEl = null;
+
+/** 画笔模式的面板文案（**必须与 N1 逐字一致**，不要改） */
+const BTN_MODE_TITLE = '选择颜色';
+const BTN_MODE_DESC = 'MARD 221 色 · 点色号即选中';
 
 /** 全部色块按钮（构建后一次性缓存，不从 DOM 反复查 221 个节点） */
 let cells = [];
@@ -170,9 +194,19 @@ function setRoving(el, focus) {
   }
 }
 
-/** 更新 `aria-selected`（当前画笔色）与计数文案 */
+/**
+ * 更新 `aria-selected`（当前画笔色）与计数文案。
+ *
+ * ⚠️ **换色模式下选中态恒为 false**（N2 定案）：换色的"选中"语义是
+ *    "挑一个目标色"，与当前画笔色无关。若这里仍拿 `state.editColor.name` 当基准，
+ *    用户正在换 D13、而画笔是 M1 时，M1 会被错误地标成选中 ——
+ *    N1 的专项测试断言的正是"选中态只落在当前画笔色"，
+ *    那条断言在**画笔模式**下必须继续成立。
+ */
 function syncSelectionState() {
-  const current = state.editColor ? state.editColor.name : null;
+  const current = mode && mode.kind === 'replace'
+    ? null
+    : (state.editColor ? state.editColor.name : null);
   for (const el of cells) {
     el.setAttribute('aria-selected', el.dataset.name === current ? 'true' : 'false');
   }
@@ -246,7 +280,7 @@ function applyFilter() {
 }
 
 /** 打开色板 */
-export function openPalette() {
+export function openPalette(purpose) {
   // ⚠️ "无图纸"守卫：真实界面上 #previewSection 隐藏时按钮点不到，
   //    这道守卫是为**脚本与自动化**留的（本仓库对"看起来灰了其实还能触发"有专门记录）
   if (!state.gridData) {
@@ -254,28 +288,98 @@ export function openPalette() {
     showToastNoGrid();
     return;
   }
+  // ⚠️⚠️ 判定必须写成 `purpose && purpose.kind === 'replace'`。
+  //    `paletteBtn.addEventListener('click', openPalette)` 会把 **ClickEvent** 传进来
+  //    （不是 undefined），而 ClickEvent 也是 object —— 若写成
+  //    `typeof purpose === 'object'` 就**每次点按钮都误入换色模式**，
+  //    症状是面板标题变成「把 undefined 换成…」。
+  mode = purpose && purpose.kind === 'replace'
+    ? { kind: 'replace', sourceName: purpose.sourceName, cellCount: purpose.cellCount | 0 }
+    : null;
+  // 焦点归还目标：换色模式由打开方指定（统计表那一行的按钮），
+  // 画笔模式固定为 #paletteBtn（N1 原行为）。
+  focusReturnEl = mode && purpose.returnFocus ? purpose.returnFocus : paletteBtn;
+
   build();
   lastActive = document.activeElement;
   paletteOverlay.hidden = false;
   paletteBtn.setAttribute('aria-expanded', 'true');
   document.documentElement.classList.add('palette-open');
   paletteFilter.value = '';
+  syncModeChrome();
   applyFilter();
-  // D3：焦点落在**第一个色块**（不是筛选框）
+  // 焦点落在**第一个色块**（不是筛选框）—— 换色模式同理（同一套键盘习惯）
   const first = cells[0];
   if (first) setRoving(first, true);
-  announce('色板已打开：MARD 221 色，用方向键移动，回车选中');
+  if (mode) {
+    announce(`批量换色：选择 ${mode.sourceName} 的新颜色，共 ${mode.cellCount} 格会被替换`);
+  } else {
+    announce('色板已打开：MARD 221 色，用方向键移动，回车选中');
+  }
 }
 
-/** 关闭色板（三条路径共用同一收尾：✕ / Escape / 点遮罩） */
+/**
+ * 按当前 `mode` 同步面板标题/副标题，并把**源色块**标成不可选（N2）。
+ *
+ * ⚠️ 源色块用 `aria-disabled` 而**不是** `disabled`（N2 定案）：
+ *    `disabled` 会让它掉出 roving 焦点序列（键盘用户在 221 格里"跳过一个洞"），
+ *    且读屏不会播报它为什么不可选。
+ */
+function syncModeChrome() {
+  const isReplace = !!mode;
+  paletteTitle.textContent = isReplace ? `把 ${mode.sourceName} 换成…` : BTN_MODE_TITLE;
+  paletteDesc.textContent = isReplace
+    ? `全图 ${mode.cellCount} 格会被替换 · 可用 Ctrl+Z 撤销`
+    : BTN_MODE_DESC;
+  const selfName = isReplace ? mode.sourceName : null;
+  for (const el of cells) {
+    const isSelf = el.dataset.name === selfName;
+    el.classList.toggle('palette-cell-self', isSelf);
+    if (isSelf) el.setAttribute('aria-disabled', 'true');
+    else el.removeAttribute('aria-disabled');
+  }
+}
+
+/**
+ * 关闭色板（三条路径共用同一收尾：✕ / Escape / 点遮罩）。
+ *
+ * ⚠️ **焦点策略**（N2 修正，此处曾被写死成"一律还给 #paletteBtn"）：
+ *    N1 时代面板**只有一个**打开入口（`#paletteBtn`），所以"关闭就还给按钮"是对的。
+ *    N2 多了第二个入口（统计表的「🔄 换色」），写死就会把焦点从**统计表**抢到
+ *    工具栏 —— 紧接着 `renderStats()` 重建表格、`refreshStatsKeepingFocus()`
+ *    再去读 `activeElement`，读到的已经是 `#paletteBtn`，于是**键盘用户失去落点**。
+ *
+ *    正确规则是两条：
+ *      ① **焦点若在面板内（或已掉到 body）** ⇒ 还给**打开它的那个元素**
+ *         （换色模式 = 那一行的换色按钮；画笔模式 = `#paletteBtn`，与 N1 一致）；
+ *      ② **焦点若已被用户移到别处**（画布、输入框）⇒ **什么都不做**。
+ *         这正是 U7 的兜底精神：不抢用户已经在用的焦点。
+ *
+ *    判据必须**在隐藏面板之前**取（隐藏会让面板内的焦点自动掉回 body）。
+ */
 export function closePalette() {
   if (paletteOverlay.hidden) return;
+  const active = document.activeElement;
+  const focusInPanel = !!(active && paletteOverlay.contains(active));
+  const focusLost = !active || active === document.body;
+  const returnTo = focusReturnEl || paletteBtn;
+
   paletteOverlay.hidden = true;
   paletteBtn.setAttribute('aria-expanded', 'false');
   document.documentElement.classList.remove('palette-open');
-  // 硬约束 4：焦点还给触发按钮（不是 lastActive —— 用户可能从别处用键盘唤出，
-  // 但本面板的**唯一**打开入口就是 #paletteBtn）
-  //
+  // ⚠️ **必须清空模式**（N2 定案）：不清的话下一次点「🎨 全部色板」
+  //    打开的仍是换色模式的标题与源色禁用状态 —— 用户会以为色板坏了。
+  mode = null;
+  focusReturnEl = null;
+  // 把**面板上的文字与源色标记**一并复位。
+  // 只清 `mode` 变量是不够的：DOM 会停在「把 D13 换成…」与灰掉的那个色块上。
+  // 面板此刻是隐藏的，所以"看不见"，但只要将来哪条打开路径漏了 `syncModeChrome()`，
+  // 用户就会看到一个"上辈子的标题"。这里复位是**冗余但必要**的一层
+  // （专项测试直接盯关闭后的 DOM）。
+  syncModeChrome();
+
+  if (!focusInPanel && !focusLost) return;
+
   // ⚠️ **必须 preventScroll**（真实 Chrome 实测踩到）：直接 `focus()` 会让浏览器
   //    把按钮滚进视野 —— 用户明明停在预览区（色板是 position:fixed，与滚动位置无关），
   //    关掉面板时页面却横跳数百像素（实测 200 → 943）。
@@ -285,9 +389,9 @@ export function closePalette() {
   //    与 `scrollIntoView` 一样做能力检测：老 Safari 不认这个参数时会抛或忽略，
   //    用 try/catch 兜住，退化为普通 focus()（至少焦点是对的）。
   try {
-    paletteBtn.focus({ preventScroll: true });
+    returnTo.focus({ preventScroll: true });
   } catch (e) {
-    paletteBtn.focus();
+    returnTo.focus();
   }
 }
 
@@ -316,6 +420,20 @@ paletteOverlay.addEventListener('click', (e) => {
 paletteBody.addEventListener('click', (e) => {
   const btn = e.target.closest ? e.target.closest('.palette-cell') : null;
   if (!btn) return;
+  // ⚠️ **先判 `aria-disabled`，再走选中**（N2 定案）。
+  //    判反了的表现是"点源色 → 面板关掉 → 什么都没改"，用户会以为换色失败。
+  if (btn.getAttribute('aria-disabled') === 'true') {
+    // 源色 == 目标色 ⇒ 拒绝并**说明原因**，不关面板
+    showToast('这就是当前要替换的色号，请另选一个');
+    return;
+  }
+  if (mode) {
+    // 批量换色模式：选中即改图（收尾由 edit-ui.js 的 applyReplacement 负责）
+    const target = btn.dataset.name;
+    closePalette();
+    applyReplacement(target);
+    return;
+  }
   // 与统计表 / 吸管走同一个选色函数（硬约束 1）
   chooseEditColor(btn.dataset.name);
   closePalette();

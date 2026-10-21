@@ -1006,8 +1006,11 @@ body {
 }
 
 /* 统计表里的「选为画笔色」按钮 —— 常规字号会让 52×52 的表格明显变高，
-   故压小一档；它仍是有可访问名称的真实 <button>（键盘与读屏都可达）。 */
-.stats-pick-btn {
+   故压小一档；它仍是有可访问名称的真实 <button>（键盘与读屏都可达）。
+   「🔄 换色」与它**共用同一套尺寸**：同一行的两个按钮高度不同，
+   表格每一行都会被撑高，104×104 的表会明显变长。 */
+.stats-pick-btn,
+.stats-recolor-btn {
   padding: 4px 8px;
   font-size: 12px;
   font-family: var(--font);
@@ -1019,10 +1022,19 @@ body {
   white-space: nowrap;
 }
 
-.stats-pick-btn:hover {
+.stats-pick-btn:hover,
+.stats-recolor-btn:hover {
   background: var(--primary-light);
   color: var(--primary-hover);
   border-color: var(--primary);
+}
+
+/* 换色模式下**源色块本身**不可选（N2）。
+   ⚠️ 只做视觉置灰，**不要**动 `:focus-visible` 轮廓 —— 它仍可聚焦，
+   键盘用户要能走到它上面并听到"不可选"的播报（见 palette-picker.js 的 syncModeChrome）。 */
+.palette-cell-self {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* 简化滑块被手工编辑锁住时的**就近说明**。

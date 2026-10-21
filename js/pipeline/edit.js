@@ -282,6 +282,114 @@ export function paintCell(row, col, gridW) {
   return { ok: true, changed: true };
 }
 
+// ------------------------------------------------------------
+// 批量换色（N2）
+// ------------------------------------------------------------
+
+/**
+ * 把全图某个色号**批量替换**成另一个颜色。**一次调用 = 一笔**：
+ * 撤销一步就全部回去，不做拆细。
+ *
+ * ⚠️⚠️ **不要用 `paintCell()` 循环来实现本函数**（这是本函数存在的理由）：
+ *    `paintCell()` 会读 `state.editTool` 并依赖 `state.editColor`，
+ *    循环调用它要么改不动（工具是 `none` 时直接返回 `no-tool`），
+ *    要么迫使调用方先把画笔色切成目标色 —— 那就**静默改掉了用户的画笔态**。
+ *    批量换色是"统计表上的动作"，与当前用哪个工具、画笔是什么色**完全无关**。
+ *    有专门的突变测试守这条。
+ *
+ * ⚠️ **不碰 `rawGridData`、不调 `applySimplify()`**：后者的语义是"拿采样原始值
+ *    整份重算"，而载入存档后 `rawGridData` 是 `null`（6b 的定案）。
+ *    无原图模式下批量换色**必须照常可用**（与 N1 的色板同一条要求）。
+ *
+ * @param {string} sourceName 源色号（如 `'D13'`）
+ * @param {{name:string,hex:string,r:number,g:number,b:number}} targetColor 目标颜色
+ * @returns {{ok:boolean, reason?:string, changed:number}}
+ *          `reason` 取值：`no-grid` / `bad-arg` / `same-color` / `not-present`
+ */
+export function replaceColor(sourceName, targetColor) {
+  const grid = gridOrNull();
+  if (!grid) return { ok: false, reason: 'no-grid', changed: 0 };
+  // 参数校验：色号必须是非空字符串，目标色必须能提供**全部四个字段**
+  // （只查 name 会让 r/g/b 缺失的目标色写进网格，下游取色/导出会拿到 undefined）
+  if (typeof sourceName !== 'string' || !sourceName
+      || !targetColor || typeof targetColor.name !== 'string' || !targetColor.name
+      || typeof targetColor.hex !== 'string' || !targetColor.hex
+      || typeof targetColor.r !== 'number' || typeof targetColor.g !== 'number'
+      || typeof targetColor.b !== 'number') {
+    return { ok: false, reason: 'bad-arg', changed: 0 };
+  }
+  // 源色与目标色相同 ⇒ 拒绝并告知（由 UI 层提示）。
+  // ⚠️ 不要静默 no-op：用户点了按钮却"什么都没发生"，会以为功能坏了
+  //    （本仓库一贯要求：静默失效不可接受）。
+  if (sourceName === targetColor.name) return { ok: false, reason: 'same-color', changed: 0 };
+
+  // 列数上限按**最长行**取（网格的行长度理论上可能不一致 —— `paintCell()` 同处理）。
+  // 逐行仍按 `row.length` 遍历，故参差行不会被越界写，也不会被漏掉。
+  const hits = [];
+  for (let r = 0; r < grid.length; r++) {
+    const row = grid[r];
+    for (let c = 0; c < row.length; c++) {
+      const cell = row[c];
+      if (cell && cell.name === sourceName) hits.push({ row: r, col: c });
+    }
+  }
+  // 图上没有这个色号：可达（统计表是上一次渲染的快照，期间可能已换过色）
+  if (!hits.length) return { ok: false, reason: 'not-present', changed: 0 };
+
+  // 与 `paintCell()` 的兜底同构：没有进行中的一笔就自动开一笔，
+  // 并在**微任务**里收尾（一次调用 = 一笔，与"一次点击 = 一笔"的粒度一致）。
+  // ⚠️ 收尾靠**对象身份**（`autoCloseStroke`），不能只看 `stroke !== null` ——
+  //    见 `autoCloseStroke` 的说明，那是实测踩到的时序缺陷。
+  if (!stroke) {
+    const auto = beginStroke();
+    queueMicrotask(() => autoCloseStroke(auto));
+  }
+
+  let changed = 0;
+  for (const { row, col } of hits) {
+    const key = `${row},${col}`;
+    if (stroke.seen.has(key)) continue;
+    stroke.seen.add(key);
+    const before = grid[row][col];
+    // 硬约束 1：写入的必须是**副本** —— 这是「三重别名」的第五个入口
+    // （前四个：采样 / 反序列化 / adoptGrid / paintCell）。
+    const after = copyCell(targetColor);
+    stroke.changes.push({ row, col, before: copyCell(before), after: copyCell(after) });
+    grid[row][col] = after;
+    changed++;
+  }
+
+  // 硬约束 3 的同一条：真没改动就不该留下痕迹（此处 hits 非空且值必不同，
+  // `changed` 理论上 > 0；保留判断是为了让"空笔"永远进不了撤销栈）。
+  if (!changed) return { ok: false, reason: 'not-present', changed: 0 };
+
+  syncColorCounts();
+  return { ok: true, changed };
+}
+
+/**
+ * 统计某个色号在**当前网格**里有多少格（供 UI 在打开换色面板前报出影响面）。
+ *
+ * ⚠️ 不从 `state.colorCounts` 取：那是**上一次渲染的统计快照**，
+ *    而批量换色改的是 `gridData`。两者在"刚换完色、还没重绘"的窗口里会不一致，
+ *    报出去的格数就会误导用户（"显示 132 格，实际只改了 70 格"）。
+ *    从网格**现算**一遍，成本 O(格数) ≈ 1 万次字符串比较，实测亚毫秒级。
+ *
+ * @param {string} name 色号名
+ * @returns {number} 命中格数（无图纸 / 色号不存在时为 0）
+ */
+export function countColorCells(name) {
+  const grid = gridOrNull();
+  if (!grid || typeof name !== 'string' || !name) return 0;
+  let n = 0;
+  for (const row of grid) {
+    for (const cell of row) {
+      if (cell && cell.name === name) n++;
+    }
+  }
+  return n;
+}
+
 /**
  * 吸管：取某一格的色号作为画笔颜色。
  * @returns {{ok:boolean, reason?:string, color?:object}} 空格返回 `empty-cell`

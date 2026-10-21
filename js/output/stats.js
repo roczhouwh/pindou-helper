@@ -41,16 +41,19 @@ export function renderStats() {
         <td><span class="color-count">${c.count}</span></td>
         <td><button type="button" class="stats-pick-btn" data-name="${c.name}"
                     aria-label="用 ${c.name} 作为画笔颜色">🖌 选为画笔色</button></td>
+        <td><button type="button" class="stats-recolor-btn" data-name="${c.name}"
+                    aria-label="把全图的 ${c.name} 批量换成别的颜色">🔄 换色</button></td>
       </tr>`;
     total += c.count;
   }
 
   statsBody.innerHTML = html;
-  // ⚠️ `colspan` 必须跟着列数走：4 列时"颜色/色号/数量"是 3 列 ⇒ colspan=3。
-  //    写成 4 会把「总计」顶到操作列、把颗数挤到下一列（表头与数据错位）。
+  // ⚠️ `colspan` 必须跟着列数走：5 列时"颜色/色号/数量/批量"是 **4** 列 ⇒ colspan=4。
+  //    写成 3 会把「总计」顶到批量列、把颗数挤到下一列（表头与数据错位）。
+  //    这条**每加一列都必须重算**，且必须与 index.html 的 <th> 数一起改。
   statsFoot.innerHTML = `
     <tr>
-      <td colspan="3">总计</td>
+      <td colspan="4">总计</td>
       <td><span class="color-count">${total} 颗</span></td>
     </tr>`;
 }

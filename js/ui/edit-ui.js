@@ -5,9 +5,10 @@ import { state } from '../core/state.js';
 import { showToast } from '../input/upload.js';
 import { hitTestCell, cellsBetween, previewLayoutFor, renderPreview } from '../output/preview.js';
 import { renderStats } from '../output/stats.js';
-import { EDIT_TOOL, beginStroke, canRedo, canUndo, endStroke, paintCell, pickColorAt, redoEdit, setEditColor, setEditStateListener, setEditTool, undoEdit } from '../pipeline/edit.js';
+import { EDIT_TOOL, beginStroke, canRedo, canUndo, countColorCells, endStroke, paintCell, pickColorAt, redoEdit, replaceColor, setEditColor, setEditStateListener, setEditTool, undoEdit } from '../pipeline/edit.js';
 import { announce } from './a11y.js';
 import { refreshSamplingControls } from './grid-select.js';
+import { openPalette } from './palette-picker.js';
 
 // ============================================================
 // js/ui/edit-ui.js — 单元格编辑的**界面层**
@@ -78,9 +79,109 @@ const TOOL_LABEL = {
 const PICK_COLOR_HINT =
   '点「🎨 全部色板」挑一个色号，或在「颜色统计」里点「选为画笔色」，也可用「吸管」从图上取色';
 
+// ------------------------------------------------------------
+// 批量换色（N2）
+// ------------------------------------------------------------
+
+/**
+ * 「没有图纸可编辑」的**唯一文案源**。
+ *
+ * ⚠️ 这句话原本在本模块的 `toggleTool()` 与 `palette-picker.js` 的
+ *    `showToastNoGrid()` 各写一遍，N2 又新增了第三处调用（换色入口）——
+ *    再各写一遍必然漂移（N1 收 `PICK_COLOR_HINT` 的同一教训）。
+ */
+const NO_GRID_HINT = '还没有图纸可编辑，请先上传图片生成图纸或载入一份存档';
+
+/**
+ * 待换色的源色号（`openRecolorFor` 写入、`applyReplacement` 消费后清空）。
+ *
+ * ⚠️ 为什么需要它：色板的 `closePalette()` 会清空自己的 `mode`（防止模式残留），
+ *    而"点色块"的顺序是「先 closePalette 再 applyReplacement」——
+ *    若让 `applyReplacement` 去读色板的 mode，拿到的永远是 null。
+ *    故源色号由**打开方（本模块）**记，生命周期与面板解耦。
+ */
+let pendingRecolorSource = null;
+
+/**
+ * 打开换色面板：把统计表某一行的色号作为**源色**。
+ *
+ * ⚠️ 格数必须**从网格现算**（`countColorCells`），不要读 `state.colorCounts`
+ *    ——那是上一次渲染的快照，与 `gridData` 在"刚换完色还没重绘"的窗口里会不一致，
+ *    报出去的格数会误导用户（详见 edit.js 里 `countColorCells` 的注释）。
+ *
+ * @param {string} sourceName 源色号
+ * @param {HTMLElement} [triggerEl] 触发本次换色的按钮（关闭面板时把焦点还给它）
+ */
+export function openRecolorFor(sourceName, triggerEl) {
+  if (!state.gridData) {
+    // ⚠️ 与 toggleTool() 同一句（同一个用户动作在两处入口上的同一句解释）
+    showToast(NO_GRID_HINT);
+    return;
+  }
+  const cellCount = countColorCells(sourceName);
+  if (!cellCount) {
+    showToast('这个色号已不在当前图纸里，请刷新统计表后重试');
+    return;
+  }
+  pendingRecolorSource = sourceName;
+  // ⚠️ 把**触发按钮**一并传下去：关闭面板时焦点必须回到它，
+  //    否则键盘用户会从统计表被甩到工具栏（N2 修过的真实缺陷）。
+  openPalette({ kind: 'replace', sourceName, cellCount, returnFocus: triggerEl || null });
+}
+
+/**
+ * 施加批量换色（由色板在换色模式下选中目标色后调用）。
+ *
+ * ⚠️ 收尾的五件事**一件都不能少**：
+ *    预览 / 统计（带焦点保持）/ 编辑态 / toast / 播报。
+ *    `refreshPrintInfo()` **刻意不调** —— 分页只由行列数决定，色数不进文案。
+ *
+ * @param {string} targetName 目标色号
+ * @returns {boolean} 是否成功
+ */
+export function applyReplacement(targetName) {
+  // 目标色必须回查色板拿**完整字段**（调用方只传了色号名）
+  const target = (typeof PERLER_PALETTE !== 'undefined' ? PERLER_PALETTE : [])
+    .find((p) => p.name === targetName);
+  if (!target) {
+    showToast('这个颜色不在色板里，请重新选择');
+    return false;
+  }
+  // 源色号在面板打开期间可能已变（统计表是快照）——以 openRecolorFor 记下的为准
+  const sourceName = pendingRecolorSource;
+  if (!sourceName) {
+    showToast('换色已取消，请重新点「🔄 换色」');
+    return false;
+  }
+  pendingRecolorSource = null;
+
+  const res = replaceColor(sourceName, target);
+  if (!res.ok) {
+    if (res.reason === 'same-color') {
+      showToast('这就是当前要替换的色号，请另选一个');
+    } else if (res.reason === 'not-present') {
+      showToast('这个色号已不在当前图纸里，请刷新统计表后重试');
+    } else if (res.reason === 'no-grid') {
+      showToast(NO_GRID_HINT);
+    } else {
+      showToast('换色没有成功，请重新试一次');
+    }
+    return false;
+  }
+
+  // 收尾：一次换色 = 一笔（模型层已保证），这里只负责让界面跟上
+  renderPreview();
+  refreshStatsKeepingFocus();
+  updateEditUI();
+  const msg = `已把 ${sourceName} 全部换成 ${targetName}（${res.changed} 格）`;
+  showToast(msg);
+  announce(`已批量换色：${sourceName} → ${targetName}，共 ${res.changed} 格，`
+    + `当前 ${state.colorCounts ? state.colorCounts.length : 0} 种颜色`);
+  return true;
+}
+
 /**
  * 统一的"选一个画笔色"——**三条选色入口共用**（色板 / 统计表 / 吸管）。
- *
  * 语义（与统计表原有语义**逐字一致**）：
  *   1. `setEditColor()`（模型层内部逐字段拷贝，绝不存引用）；
  *   2. **仅当**当前是 `none` 才切到画笔 —— 用户在**擦除态**挑个色备用，
@@ -224,13 +325,37 @@ function announceEditResult(what, cells) {
  */
 function refreshStatsKeepingFocus() {
   const el = document.activeElement;
-  const keepName = el && el.classList && el.classList.contains('stats-pick-btn')
-    ? el.dataset.name
+  // ⚠️ 必须**按原来的类名精确还原**（N2）：两种按钮（选画笔色 / 批量换色）
+  //    都会触发整表重建，若只认 `.stats-pick-btn`，换色后焦点会掉到 <body>。
+  //    ⚠️ **不要**把两个判据合并成 `startsWith('stats-')` 之类的前缀匹配：
+  //    将来再加 `stats-xxx-btn` 时会把焦点还错按钮。
+  const keepCls = el && el.classList
+    ? (el.classList.contains('stats-pick-btn') ? 'stats-pick-btn'
+      : el.classList.contains('stats-recolor-btn') ? 'stats-recolor-btn' : null)
     : null;
+  const keepName = keepCls ? el.dataset.name : null;
   renderStats();
-  if (!keepName) return;
-  const next = statsBody.querySelector(`.stats-pick-btn[data-name="${keepName}"]`);
-  if (next) next.focus();
+  // ⚠️⚠️ **这一行绝不能删**：它是 U7 的兜底 —— 用户在画布上涂色时
+  //    （焦点已被 `pointerdown` 交给 canvas），不能把焦点抢回统计表，
+  //    否则浏览器 `scrollIntoView` 会让页面"一松手就滚回颜色统计"。
+  //    ⇒ 只有"焦点原本就在统计按钮上"这一种情况才还原。
+  if (!keepCls || !keepName) return;
+  const next = statsBody.querySelector(`.${keepCls}[data-name="${keepName}"]`);
+  if (next) { next.focus(); return; }
+  // ⚠️ 目标行**可能已经不存在**（N2）：批量换色把源色号改没了，
+  //    换色后源色行会立刻从表里消失 —— 于是 `next` 为 null，焦点会掉到 <body>。
+  //    这时必须给它一个**同类的回落目标**，否则键盘用户换完色就失去落点
+  //    （表现为"按 Tab 之后不知道从哪儿开始"）。
+  //    回落顺序：同表其他换色按钮 → 其他选色按钮 → 统计表标题。
+  const fallback = statsBody.querySelector(`.${keepCls}`)
+    || statsBody.querySelector('.stats-pick-btn')
+    || statsSection.querySelector('.section-title');
+  if (fallback && typeof fallback.focus === 'function') {
+    if (!fallback.hasAttribute('tabindex') && fallback.tagName !== 'BUTTON') {
+      fallback.setAttribute('tabindex', '-1');
+    }
+    fallback.focus();
+  }
 }
 
 // ------------------------------------------------------------
@@ -424,7 +549,7 @@ previewCanvas.addEventListener('pointercancel', finishPainting);
  */
 function toggleTool(tool) {
   if (!state.gridData) {
-    showToast('还没有图纸可编辑，请先上传图片生成图纸或载入一份存档');
+    showToast(NO_GRID_HINT);
     return;
   }
   // 已经是这个工具：重复点是**无操作**，不是退出（见上方说明）
@@ -454,10 +579,15 @@ exitEditBtn.addEventListener('click', () => {
 // ⚠️ 用**事件委托**而不是给每行的按钮绑定：统计表会被整表重建，
 //    逐个绑定在每次重绘后都要重来一遍，漏一次的表现就是"按钮点了没反应"。
 statsBody.addEventListener('click', (e) => {
-  const btn = e.target.closest ? e.target.closest('.stats-pick-btn') : null;
-  if (!btn) return;
-  // 与色板 / 吸管走**同一个**选色函数（三条入口逐字一致）
-  chooseEditColor(btn.dataset.name);
+  const pick = e.target.closest ? e.target.closest('.stats-pick-btn') : null;
+  if (pick) {
+    // 与色板 / 吸管走**同一个**选色函数（三条入口逐字一致）
+    chooseEditColor(pick.dataset.name);
+    return;
+  }
+  // 批量换色：源色就是**这一行**的色号，零歧义
+  const recolor = e.target.closest ? e.target.closest('.stats-recolor-btn') : null;
+  if (recolor) openRecolorFor(recolor.dataset.name, recolor);
 });
 
 // ------------------------------------------------------------
