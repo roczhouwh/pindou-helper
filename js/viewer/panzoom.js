@@ -2,7 +2,7 @@ import { viewerWrapper } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { clamp } from '../ui/a11y.js';
 import { updateSelectionBox } from './selection.js';
-import { renderViewer, resizeViewerCanvas } from './viewer.js';
+import { renderViewer, resizeViewerCanvas, scheduleViewerRedraw } from './viewer.js';
 
 // ============================================================
 // js/viewer/panzoom.js — 缩放与平移（右键拖拽 / 滚轮 / 双指 / 窗口尺寸）
@@ -101,4 +101,33 @@ window.addEventListener('resize', () => {
     renderViewer();
     updateSelectionBox();
   }
+});
+
+// ------------------------------------------------------------
+// 右键平移的位移（本域职责）
+// ------------------------------------------------------------
+// 改造前这段逻辑**住在 selection.js 的 pointermove 回调里**，
+// 与选框拖拽、手柄缩放并联在同一个回调中 —— 一次移动横跨两个文件的责任。
+//
+// 现在由本文件自己注册 document 级监听、自己处理，三态天然互斥，互不干扰。
+
+document.addEventListener('pointermove', (e) => {
+  applyPanMove(e);
+});
+
+/**
+ * 平移中的位移累积。**必须相对 `panStartPan` 累计**，不能逐帧取增量叠加：
+ * 后者会让位移与帧数挂钩，实测 10 帧每帧 +10px 只产生 10px 位移。
+ */
+function applyPanMove(e) {
+  if (!state.isPanning) return;
+  state.panX = state.panStartPan.x + (e.clientX - state.dragStartClient.x);
+  state.panY = state.panStartPan.y + (e.clientY - state.dragStartClient.y);
+  scheduleViewerRedraw();
+}
+
+document.addEventListener('pointerup', () => {
+  if (!state.isPanning) return;
+  state.isPanning = false;
+  viewerWrapper.classList.remove('panning');
 });

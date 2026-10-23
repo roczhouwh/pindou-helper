@@ -216,6 +216,31 @@ export const state = {
 export const viewerCtx = viewerCanvas.getContext('2d');
 
 /**
+ * **把"文档级"状态整份复位**（点「重新上传」时用）。
+ *
+ * ⚠️ 这是**纯数据操作，不碰 DOM** —— 界面回到上传阶段是另一件事，
+ *    由 `viewer/viewer.js` 的 `showUploadStage()` 负责。
+ *    在 core/ 里碰 DOM 会破坏分层，也让这个函数没法单独测。
+ *
+ * ⚠️ 只复位**随图纸走**的字段。用户偏好（标尺开关、编辑工具状态等）
+ *    不属于"这一份图纸"，不要在这里清。
+ *
+ * ⚠️ 新增文档级字段时**必须补进本函数**，否则会出现
+ *    "点了重新上传，上一张图的 X 还留着"——这类残留极难从界面上看出来。
+ */
+export function resetDocumentState() {
+  state.image = null;
+  state.gridData = null;
+  state.colorCounts = null;
+  state.rawGridData = null;
+  state.rawColorCounts = null;
+  state.mergedColors = [];
+  state.aspectWarning = null;
+  state.gridW = 29;
+  state.gridH = 29;
+}
+
+/**
  * 把 CSS 变量里的主题色同步到 <meta name="theme-color">。
  * 主题色原本硬编码在 4 处（CSS / meta / manifest / icon.svg），改主题极易漏改。
  * meta 这一处可以在运行时从唯一真源（`--primary`）推导，

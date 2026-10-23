@@ -252,3 +252,44 @@ export function findNearestColor(target) {
   }
   return best;
 }
+
+// ------------------------------------------------------------
+// CIELAB 颜色差异（ΔE76）
+// ------------------------------------------------------------
+// RGB 欧氏距离与人眼感知不成正比：同样的距离，在深色区域比在浅色区域
+// "看起来差得多"。ΔE76 先把颜色转到 CIELAB（近似感知均匀），
+// 再算欧氏距离 —— 数值上 1 个单位大致对应"刚好能分辨的一点点差别"。
+//
+// 简化合并（近似色）用它做阈值，比 RGB 距离更贴近"这两颗豆看起来像不像"。
+// `rgbToLab` 对同一个颜色对象做了缓存（WeakMap），色板 221 色反复比较不会重复转换。
+
+const LAB_MEMO = new WeakMap();
+
+/** RGB → CIELAB。同一对象重复调用走缓存。 */
+export function rgbToLab(c) {
+  const memo = LAB_MEMO.get(c);
+  if (memo) return memo;
+  // sRGB 分量先线性化（去掉 gamma），再按 D65 标准光源转到 XYZ，最后转 Lab
+  const lin = (v) => {
+    const x = v / 255;
+    return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+  };
+  const r = lin(c.r), g = lin(c.g), b = lin(c.b);
+  const x = (r * 0.4124564 + g * 0.3575761 + b * 0.1804375) / 0.95047;
+  const y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750;
+  const z = (r * 0.0193339 + g * 0.1191920 + b * 0.9503041) / 1.08883;
+  const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  const lab = [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))];
+  LAB_MEMO.set(c, lab);
+  return lab;
+}
+
+/** 两个颜色的 ΔE76 差（越小越接近；约 2.3 起肉眼可辨）。 */
+export function deltaE76(c1, c2) {
+  const a = rgbToLab(c1);
+  const b = rgbToLab(c2);
+  const dL = a[0] - b[0];
+  const da = a[1] - b[1];
+  const db = a[2] - b[2];
+  return Math.sqrt(dL * dL + da * da + db * db);
+}

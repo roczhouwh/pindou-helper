@@ -64,7 +64,7 @@
 // v31：N2 统计表批量换色（「🔄 换色」）——
 //      统计表 4 列改 5 列（新增「批量」列）；edit.js 新增 replaceColor()/countColorCells()；
 //      色板新增"换色模式"（复刻同一面板，不新建模块 ⇒ 本清单无需新增条目）。
-const CACHE_NAME = 'pindou-v31';
+const CACHE_NAME = 'pindou-v36';
 
 // 拼豆自己的资源列表（相对 SW 脚本作用域解析）
 // ⚠️ 每新增一个 js/ 模块都必须加进来 —— 漏了会导致**离线时该模块 404 → 白屏**，

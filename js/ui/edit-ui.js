@@ -1,6 +1,6 @@
 // ⚠️ **import 一律写成单行具名形式**：便于静态检查工具解析依赖。
 import { PERLER_PALETTE } from '../../color-palette.js';
-import { brushBtn, editColorName, editColorSwatch, editHint, eraseBtn, exitEditBtn, pickBtn, previewCanvas, redoBtn, statsBody, undoBtn } from '../core/dom.js';
+import { brushBtn, editColorName, editColorSwatch, editHint, eraseBtn, exitEditBtn, pickBtn, previewCanvas, redoBtn, statsBody, statsSection, undoBtn } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { showToast } from '../input/upload.js';
 import { hitTestCell, cellsBetween, previewLayoutFor, renderPreview } from '../output/preview.js';

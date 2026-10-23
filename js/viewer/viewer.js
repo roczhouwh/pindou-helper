@@ -1,8 +1,26 @@
-import { controlsSection, downloadBtn, isTouchDevice, previewSection, printBtn, selectionBox, statsSection, uploadSection, viewerCanvas, viewerHint, viewerHint2, viewerHint3, viewerHint4, viewerSection, viewerWrapper } from '../core/dom.js';
+import { controlsSection, downloadBtn, isTouchDevice, previewSection, printBtn, saveArchiveBtn, selectionBox, statsSection, uploadSection, viewerCanvas, viewerHint, viewerHint2, viewerHint3, viewerHint4, viewerSection, viewerWrapper } from '../core/dom.js';
 import { state, viewerCtx } from '../core/state.js';
-import { generateGrid } from '../pipeline/grid.js';
-import { exitArchiveMode } from '../ui/library.js';
 import { updateSelectionBox } from './selection.js';
+
+// ⚠️ 本文件**不反向 import 上位领域**。两条跨领域动作各自留一个 hook，
+//    由编排层 `js/main.js` 注入：
+//      · `setViewerReadyHandler`  —— 图片渲染完、可以生成图纸时（通常是 generateGrid）
+//      · `setExitArchiveHandler`  —— 载入新图时退出「存档模式」（通常是 exitArchiveMode）
+//    未注册时**只 warn 不抛错**：抛错会让一次普通上传白屏，
+//    比"少一次自动生成 / 横幅残留"严重得多。
+let viewerReadyHandler = null;
+
+/** 由 `js/main.js` 注入：查看器就绪后要执行的跨领域动作（通常是 generateGrid）。 */
+export function setViewerReadyHandler(fn) {
+  viewerReadyHandler = typeof fn === 'function' ? fn : null;
+}
+
+let exitArchiveHandler = null;
+
+/** 由 `js/main.js` 注入：进入查看器时要执行的跨领域动作（通常是 exitArchiveMode）。 */
+export function setExitArchiveHandler(fn) {
+  exitArchiveHandler = typeof fn === 'function' ? fn : null;
+}
 
 // ============================================================
 // js/viewer/viewer.js — 图片查看器（画布渲染与坐标换算）
@@ -84,7 +102,11 @@ export function showViewer() {
   // 唯一必经之处（handleFile 只在这里收尾），收在这里才不会漏掉某条分支。
   // ⚠️ 漏了它的表现是"上传了新图，但网格尺寸按钮与简化滑块仍是灰的、
   //    横幅还挂着上一份存档的说明"——只有用户能撞见。
-  exitArchiveMode();
+  if (exitArchiveHandler) exitArchiveHandler();
+  else {
+    console.warn('[viewer] 未注册 exitArchiveHandler —— 上传新图后可能残留「已载入存档」横幅，'
+      + '且网格尺寸/简化滑块仍是灰的。请在 js/main.js 里调用 setExitArchiveHandler(exitArchiveMode)。');
+  }
   viewerHint.hidden = false;
   viewerHint2.hidden = isTouchDevice;
   viewerHint3.hidden = !isTouchDevice;
@@ -102,8 +124,36 @@ export function showViewer() {
     resizeViewerCanvas();
     renderViewer();
     updateSelectionBox();
-    generateGrid();
+    if (viewerReadyHandler) viewerReadyHandler();
+    else {
+      console.warn('[viewer] 未注册 viewerReadyHandler —— 上传后不会自动生成图纸。'
+        + '请在 js/main.js 里调用 setViewerReadyHandler(generateGrid)。');
+    }
   });
+}
+
+/**
+ * 把界面**退回上传阶段**（与 `showViewer()` 对称）。
+ *
+ * ⚠️ 这里只做界面（画布 / 选框 / 区块显隐 / 按钮禁用）。
+ *    **数据复位是另一件事** —— 由 `core/state.js` 的 `resetDocumentState()` 负责。
+ *    两者分开的理由：界面与数据各自可单独测试，也不会出现"清了一半"的中间态。
+ *
+ * ⚠️ 新增"仅查看阶段可见"的元素时，**必须同步补进本函数与 `showViewer()`**，
+ *    否则会出现"退回上传页了，某个区块还浮在上面"。
+ */
+export function showUploadStage() {
+  viewerCtx.clearRect(0, 0, viewerCanvas.width, viewerCanvas.height);
+  selectionBox.classList.remove('visible');
+  uploadSection.hidden = false;
+  viewerSection.hidden = true;
+  controlsSection.hidden = true;
+  previewSection.hidden = true;
+  statsSection.hidden = true;
+  // 三个出口在没图纸时都不可用（否则点了会没反应或报错）
+  downloadBtn.disabled = true;
+  printBtn.disabled = true;
+  saveArchiveBtn.disabled = true;
 }
 
 export function resizeViewerCanvas() {

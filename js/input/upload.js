@@ -4,7 +4,15 @@ import { closeCamera, openCamera } from './camera.js';
 import { resetEditState } from '../pipeline/edit.js';
 import { markActiveGridBtn } from '../ui/a11y.js';
 import { resetSimplify } from '../ui/grid-select.js';
-import { showViewer } from '../viewer/viewer.js';
+// ⚠️ 上传成功后"切到查看器"是**跨领域**动作（input → viewer）。
+//    这里不直接 import viewer，而是留一个 hook，由编排层注入。
+//    未注册时只 warn 不抛错 —— 抛错会让一次普通上传白屏。
+let fileLoadedHandler = null;
+
+/** 由 `js/main.js` 注入：读取成功后要执行的跨领域动作（通常是 showViewer）。 */
+export function setFileLoadedHandler(fn) {
+  fileLoadedHandler = typeof fn === 'function' ? fn : null;
+}
 
 // ============================================================
 // js/input/upload.js — 图片上传（选择/拖拽/相机入口）与阶段提示
@@ -115,7 +123,11 @@ export function handleFile(file) {
       state.gridW = 29;
       state.gridH = 29;
       markActiveGridBtn(29);
-      showViewer();
+      if (fileLoadedHandler) fileLoadedHandler();
+      else {
+        console.warn('[upload] 未注册 fileLoadedHandler —— 上传后界面不会切到查看器。'
+          + '请在 js/main.js 里调用 setFileLoadedHandler(showViewer)。');
+      }
     };
     img.src = ev.target.result;
   };
